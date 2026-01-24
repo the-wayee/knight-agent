@@ -1,5 +1,7 @@
 package org.cloudnook.knightagent.core.message;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
@@ -13,13 +15,26 @@ import java.util.Map;
  * <p>
  * 所有消息类型的抽象基类，定义了消息的公共属性。
  * 消息是 Agent 与 LLM 之间传递的基本单位。
+ * <p>
+ * 使用 Jackson 多态序列化支持，子类通过 @JsonSubTypes 注解注册。
  *
  * @author KnightAgent
  * @since 1.0.0
  */
 @Data
-@SuperBuilder
+@SuperBuilder(toBuilder = true)
 @EqualsAndHashCode(callSuper = false)
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = SystemMessage.class, name = "SYSTEM"),
+        @JsonSubTypes.Type(value = HumanMessage.class, name = "HUMAN"),
+        @JsonSubTypes.Type(value = AIMessage.class, name = "AI"),
+        @JsonSubTypes.Type(value = ToolMessage.class, name = "TOOL")
+})
 public abstract class Message {
 
     /**

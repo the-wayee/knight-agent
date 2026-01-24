@@ -6,10 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * 工具执行器
@@ -35,6 +35,9 @@ import java.util.concurrent.TimeUnit;
  * } else {
  *     System.out.println("工具返回: " + result.getResult());
  * }
+ *
+ * // 使用完毕后关闭（释放线程池）
+ * invoker.shutdown();
  * }</pre>
  *
  * @author KnightAgent
@@ -45,6 +48,11 @@ public class ToolInvoker {
     private static final Logger log = LoggerFactory.getLogger(ToolInvoker.class);
 
     /**
+     * 默认线程池大小
+     */
+    private static final int DEFAULT_POOL_SIZE = 10;
+
+    /**
      * 已注册的工具映射
      * <p>
      * Key: 工具名称
@@ -53,10 +61,15 @@ public class ToolInvoker {
     private final Map<String, Tool> tools;
 
     /**
+     * 异步执行线程池
+     */
+    private final ExecutorService executorService;
+
+    /**
      * 默认构造函数
      */
     public ToolInvoker() {
-        this.tools = new ConcurrentHashMap<>();
+        this(null);
     }
 
     /**
@@ -65,7 +78,21 @@ public class ToolInvoker {
      * @param tools 初始工具集合
      */
     public ToolInvoker(Collection<Tool> tools) {
-        this();
+        this(tools, null);
+    }
+
+    /**
+     * 完整构造函数
+     *
+     * @param tools           初始工具集合
+     * @param executorService 自定义线程池（为 null 时使用默认线程池）
+     */
+    public ToolInvoker(Collection<Tool> tools, ExecutorService executorService) {
+        this.tools = new ConcurrentHashMap<>();
+        this.executorService = executorService != null
+                ? executorService
+                : Executors.newFixedThreadPool(DEFAULT_POOL_SIZE);
+
         if (tools != null) {
             tools.forEach(this::register);
         }
@@ -212,13 +239,56 @@ public class ToolInvoker {
     /**
      * 异步执行工具调用
      * <p>
-     * 在新的线程中执行工具，立即返回 Future。
+     * 在共享线程池中执行工具，立即返回 Future。
      *
      * @param toolCall 工具调用信息
      * @return Future，可用于获取异步执行结果
      */
-    public java.util.concurrent.Future<ToolResult> invokeAsync(ToolCall toolCall) {
-        return java.util.concurrent.Executors.newSingleThreadExecutor().submit(() -> invoke(toolCall));
+    public Future<ToolResult> invokeAsync(ToolCall toolCall) {
+        return executorService.submit(() -> invoke(toolCall));
+    }
+
+    /**
+     * 优雅关闭线程池
+     * <p>
+     * 等待已提交的任务完成，但不再接受新任务。
+     *
+     * @throws InterruptedException 如果等待被中断
+     */
+    public void shutdown() throws InterruptedException {
+        executorService.shutdown();
+        if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+            log.warn("工具执行器线程池未能在 5 秒内关闭");
+        }
+    }
+
+    /**
+     * 强制关闭线程池
+     * <p>
+     * 尝试停止所有正在执行的任务，并返回等待执行的任务列表。
+     *
+     * @return 等待执行的任务列表
+     */
+    public List<Runnable> shutdownNow() {
+        return executorService.shutdownNow();
+    }
+
+    /**
+     * 检查线程池是否已关闭
+     *
+     * @return 如果线程池已关闭返回 true
+     */
+    public boolean isShutdown() {
+        return executorService.isShutdown();
+    }
+
+    /**
+     * 检查所有任务是否已完成
+     *
+     * @return 如果所有任务已完成返回 true
+     */
+    public boolean isTerminated() {
+        return executorService.isTerminated();
     }
 
     /**

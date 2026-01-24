@@ -17,14 +17,15 @@ import java.util.Scanner;
 public class OpenAIManualTest {
 
     // ==================== 配置区域 - 请修改这里 ====================
-    private static final String API_KEY = "xxx";
-    private static final String BASE_URL = "https://api.groq.com/openai/v1";
-    private static final String MODEL_ID = "llama-3.3-70b-versatile";
+    // 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
+    private static final String API_KEY = "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";
+    private static final String BASE_URL = "https://api.openai.com/v1";
+    private static final String MODEL_ID = "gpt-3.5-turbo";
     // ===========================================================
 
     public static void main(String[] args) {
-        if (API_KEY.equals("sk-your-api-key-here")) {
-            System.err.println("请在 OpenAIManualTest.java 中配置 API_KEY");
+        if (API_KEY == null || API_KEY.isEmpty()) {
+            System.err.println("请设置环境变量 OPENAI_API_KEY");
             System.exit(1);
         }
 
@@ -76,7 +77,7 @@ public class OpenAIManualTest {
                 AIMessage response = model.chat(messages);
                 System.out.println("AI> " + response.getContent());
                 System.out.println();
-            } catch (Exception e) {
+            } catch (ModelException e) {
                 System.err.println("错误: " + e.getMessage());
                 e.printStackTrace();
             }
@@ -90,22 +91,26 @@ public class OpenAIManualTest {
         String userInput = scanner.nextLine();
 
         System.out.print("AI> ");
-        model.chatStream(List.of(HumanMessage.of(userInput)), new StreamCallbackAdapter() {
-            @Override
-            public void onToken(String token) {
-                System.out.print(token);
-            }
+        try {
+            model.chatStream(List.of(HumanMessage.of(userInput)), new StreamCallbackAdapter() {
+                @Override
+                public void onToken(String token) {
+                    System.out.print(token);
+                }
 
-            @Override
-            public void onComplete() {
-                System.out.println();
-                System.out.println("[流式输出完成]");
-            }
+                @Override
+                public void onComplete() {
+                    System.out.println();
+                    System.out.println("[流式输出完成]");
+                }
 
-            @Override
-            public void onError(Throwable error) {
-                System.err.println("\n[错误] " + error.getMessage());
-            }
-        });
+                @Override
+                public void onError(Throwable error) {
+                    System.err.println("\n[错误] " + error.getMessage());
+                }
+            });
+        } catch (ModelException e) {
+            System.err.println("错误: " + e.getMessage());
+        }
     }
 }

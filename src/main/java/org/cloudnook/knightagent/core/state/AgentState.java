@@ -1,5 +1,6 @@
 package org.cloudnook.knightagent.core.state;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.cloudnook.knightagent.core.message.Message;
 
@@ -289,9 +290,11 @@ public class AgentState {
                     .updatedAt(Instant.parse((String) stateMap.get("updatedAt")))
                     .version(((Number) stateMap.getOrDefault("version", 0)).longValue());
 
-            // 恢复消息列表（简化处理，实际需要根据类型反序列化）
+            // 恢复消息列表（使用 Jackson 多态反序列化）
             if (stateMap.containsKey("messages")) {
-                // TODO: 实现消息的反序列化
+                List<Map<String, Object>> messagesData = (List<Map<String, Object>>) stateMap.get("messages");
+                List<Message> messages = objectMapper.convertValue(messagesData, new TypeReference<List<Message>>() {});
+                builder.messages(messages);
             }
 
             // 恢复数据

@@ -1,7 +1,8 @@
 package org.cloudnook.knightagent.core.message;
 
-import lombok.Data;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 
 import java.util.ArrayList;
@@ -38,7 +39,7 @@ import java.util.List;
  * @author KnightAgent
  * @since 1.0.0
  */
-@SuperBuilder
+@SuperBuilder(toBuilder = true)
 @EqualsAndHashCode(callSuper = true)
 public class AIMessage extends Message {
 
@@ -48,6 +49,7 @@ public class AIMessage extends Message {
      * 当 LLM 决定调用工具时，会包含一个或多个工具调用请求。
      * 每个工具调用包含工具名称、参数和唯一标识。
      */
+    @Getter(AccessLevel.NONE)
     private List<ToolCall> toolCalls = new ArrayList<>();
 
     /**
@@ -76,17 +78,22 @@ public class AIMessage extends Message {
     }
 
     /**
-     * 添加工具调用
+     * 添加工具调用（返回新实例）
+     * <p>
+     * 由于消息是不可变的，此方法返回一个新的 AIMessage 实例
+     * 而不是修改当前实例。
      *
      * @param toolCall 工具调用
-     * @return this，支持链式调用
+     * @return 新的 AI 消息实例
      */
-    public AIMessage addToolCall(ToolCall toolCall) {
-        if (this.toolCalls == null) {
-            this.toolCalls = new ArrayList<>();
-        }
-        this.toolCalls.add(toolCall);
-        return this;
+    public AIMessage withToolCall(ToolCall toolCall) {
+        List<ToolCall> newCalls = new ArrayList<>(
+                this.toolCalls != null ? this.toolCalls : List.of()
+        );
+        newCalls.add(toolCall);
+        return this.toBuilder()
+                .toolCalls(newCalls)
+                .build();
     }
 
     @Override

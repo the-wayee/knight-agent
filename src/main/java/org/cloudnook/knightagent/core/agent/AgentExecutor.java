@@ -1,18 +1,16 @@
 package org.cloudnook.knightagent.core.agent;
 
+import org.cloudnook.knightagent.core.agent.strategy.ExecutionContext;
+import org.cloudnook.knightagent.core.agent.strategy.ExecutionStrategy;
+import org.cloudnook.knightagent.core.agent.strategy.ReActStrategy;
 import org.cloudnook.knightagent.core.checkpoint.Checkpointer;
 import org.cloudnook.knightagent.core.message.*;
 import org.cloudnook.knightagent.core.model.ChatModel;
-import org.cloudnook.knightagent.core.model.ChatOptions;
-import org.cloudnook.knightagent.core.model.ModelException;
 import org.cloudnook.knightagent.core.state.AgentState;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
-import org.cloudnook.knightagent.core.streaming.StreamCallbackAdapter;
 import org.cloudnook.knightagent.core.tool.Tool;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
-import org.cloudnook.knightagent.core.tool.ToolExecutionException;
 import org.cloudnook.knightagent.core.middleware.Middleware;
-import org.cloudnook.knightagent.core.middleware.AgentContext;
 import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,13 +18,14 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Agent 执行器
  * <p>
  * 负责 Agent 的核心执行逻辑。
  * 实现工具调用循环、消息构建、状态管理等。
+ * 实现 {@link Agent} 接口，作为框架的主要入口点。
  * <p>
  * 执行流程：
  * <pre>
@@ -48,10 +47,15 @@ import java.util.Optional;
  * @author KnightAgent
  * @since 1.0.0
  */
-public class AgentExecutor {
+public class AgentExecutor implements Agent {
 
     private static final Logger log = LoggerFactory.getLogger(AgentExecutor.class);
 
+    // 策略模式支持
+    private final ExecutionStrategy strategy;
+    private final ExecutionContext executionContext;
+
+    // 向后兼容的遗留字段
     private final ChatModel model;
     private final List<Tool> tools;
     private final ToolInvoker toolInvoker;
@@ -60,16 +64,39 @@ public class AgentExecutor {
     private final MiddlewareChain middlewareChain;
 
     /**
-     * 构造函数
+     * 策略模式构造函数（推荐）
      *
-     * @param model          LLM 模型
-     * @param tools          工具列表
-     * @param checkpointer   检查点存储
-     * @param config         Agent 配置
-     * @param middlewares    中间件列表
+     * @param strategy        执行策略
+     * @param executionContext 执行上下文
      */
+    public AgentExecutor(ExecutionStrategy strategy, ExecutionContext executionContext) {
+        this.strategy = strategy;
+        this.executionContext = executionContext;
+
+        // 设置兼容字段
+        this.model = executionContext.getModel();
+        this.config = executionContext.getConfig();
+        this.middlewareChain = executionContext.getMiddlewareChain();
+        this.toolInvoker = executionContext.getToolInvoker();
+        this.checkpointer = executionContext.getCheckpointer();
+        this.tools = List.of(); // 策略模式下不需要单独存储工具
+    }
+
+    /**
+     * 传统构造函数（向后兼容）
+     *
+     * @param model        LLM 模型
+     * @param tools        工具列表
+     * @param checkpointer 检查点存储
+     * @param config       Agent 配置
+     * @param middlewares  中间件列表
+     */
+    @SuppressWarnings("unused")
     public AgentExecutor(ChatModel model, List<Tool> tools, Checkpointer checkpointer,
                           AgentConfig config, List<Middleware> middlewares) {
+        // 使用默认 ReAct 策略
+        this.strategy = new ReActStrategy();
+
         this.model = model;
         this.tools = tools != null ? tools : List.of();
         this.toolInvoker = new ToolInvoker(this.tools);
@@ -78,276 +105,102 @@ public class AgentExecutor {
         this.middlewareChain = new MiddlewareChain(
                 middlewares != null ? middlewares : List.of()
         );
+
+        // 构建执行上下文
+        this.executionContext = ExecutionContext.builder()
+                .model(this.model)
+                .toolInvoker(this.toolInvoker)
+                .checkpointer(this.checkpointer)
+                .config(this.config)
+                .middlewareChain(this.middlewareChain)
+                .build();
     }
 
     /**
      * 执行 Agent（同步）
+     * <p>
+     * 使用配置的执行策略执行请求。
      *
      * @param request Agent 请求
      * @return Agent 响应
      * @throws AgentExecutionException 执行失败
      */
     public AgentResponse execute(AgentRequest request) throws AgentExecutionException {
-        long startTime = System.currentTimeMillis();
-        Instant startInstant = Instant.now();
-
-        try {
-            // 1. 创建上下文
-            AgentContext context =
-                    new AgentContext(request);
-
-            // 2. 通过中间件处理请求
-            middlewareChain.beforeInvoke(request, context);
-
-            // 3. 加载或创建状态
-            AgentState state = loadState(request.getThreadId());
-
-            // 4. 添加用户消息
-            HumanMessage userMessage = HumanMessage.of(request.getInput(), request.getUserId());
-            state = state.addMessage(userMessage);
-
-            // 5. 执行主循环
-            int maxIterations = getMaxIterations(request);
-            AIMessage finalMessage = null;
-
-            for (int i = 0; i < maxIterations; i++) {
-                context.setIteration(i + 1);
-
-                log.debug("Agent 迭代 {}/{}", i + 1, maxIterations);
-
-                // 构建消息列表
-                List<Message> messages = buildMessages(state, request);
-
-                // 调用 LLM
-                ChatOptions options = getChatOptions(request);
-                finalMessage = model.chat(messages, options);
-
-                // 添加 AI 消息到状态
-                state = state.addMessage(finalMessage);
-
-                // 检查是否需要调用工具
-                if (!finalMessage.hasToolCalls()) {
-                    log.debug("无工具调用，结束循环");
-                    break;
-                }
-
-                // 执行工具调用
-                for (ToolCall toolCall : finalMessage.getToolCalls()) {
-                    // 通过中间件验证
-                    boolean allowed = middlewareChain.beforeToolCall(toolCall, context);
-                    if (!allowed || context.isStopped()) {
-                        continue;
-                    }
-
-                    // 执行工具
-                    ToolResult result = toolInvoker.invoke(toolCall);
-
-                    // 通过中间件处理结果
-                    middlewareChain.afterToolCall(toolCall, result, context);
-
-                    // 添加工具消息到状态
-                    ToolMessage toolMessage = result.toMessage();
-                    state = state.addMessage(toolMessage);
-                }
-            }
-
-            // 6. 应用状态归约器
-            if (config.getStateReducer() != null) {
-                AgentState oldState = state;
-                state = config.getStateReducer().reduce(oldState, state);
-            }
-
-            // 7. 通过中间件处理状态更新
-            state = middlewareChain.onStateUpdate(state, state, context);
-
-            // 8. 保存检查点
-            String checkpointId = null;
-            if (config.isCheckpointEnabled() && request.getThreadId() != null) {
-                checkpointId = checkpointer.save(request.getThreadId(), state);
-            }
-
-            // 9. 构建响应
-            AgentResponse response = AgentResponse.builder()
-                    .output(finalMessage != null ? finalMessage.getContent() : "")
-                    .messages(state.getMessages())
-                    .toolCalls(finalMessage != null ? finalMessage.getToolCalls() : List.of())
-                    .state(state)
-                    .threadId(request.getThreadId())
-                    .checkpointId(checkpointId)
-                    .durationMs(System.currentTimeMillis() - startTime)
-                    .startTime(startInstant)
-                    .endTime(Instant.now())
-                    .build();
-
-            // 10. 通过中间件处理响应
-            middlewareChain.afterInvoke(response, context);
-
-            return response;
-
-        } catch (ModelException e) {
-            throw new AgentExecutionException("模型调用失败: " + e.getMessage(), e, "MODEL_ERROR");
-        } catch (ToolExecutionException e) {
-            throw new AgentExecutionException("工具执行失败: " + e.getMessage(), e, "TOOL_ERROR");
-        } catch (org.cloudnook.knightagent.core.checkpoint.CheckpointException e) {
-            throw new AgentExecutionException("检查点操作失败: " + e.getMessage(), e, "CHECKPOINT_ERROR");
-        } catch (Exception e) {
-            throw new AgentExecutionException("Agent 执行失败: " + e.getMessage(), e);
-        }
+        return strategy.execute(request, executionContext);
     }
 
     /**
      * 流式执行 Agent
+     * <p>
+     * 如果策略是 ReActStrategy，使用其流式方法；否则抛出异常。
      *
      * @param request  Agent 请求
      * @param callback 流式回调
      * @throws AgentExecutionException 执行失败
      */
     public void executeStream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
-        long startTime = System.currentTimeMillis();
-        Instant startInstant = Instant.now();
-
-        try {
-            callback.onStart();
-
-            // 1. 创建上下文
-            AgentContext context =
-                    new AgentContext(request);
-
-            // 2. 通过中间件处理请求
-            middlewareChain.beforeInvoke(request, context);
-
-            // 3. 加载或创建状态
-            AgentState state = loadState(request.getThreadId());
-
-            // 4. 添加用户消息
-            HumanMessage userMessage = HumanMessage.of(request.getInput(), request.getUserId());
-            state = state.addMessage(userMessage);
-
-            // 5. 执行主循环
-            int maxIterations = getMaxIterations(request);
-            StringBuilder fullContent = new StringBuilder();
-
-            for (int i = 0; i < maxIterations; i++) {
-                context.setIteration(i + 1);
-
-                // 构建消息列表
-                List<Message> messages = buildMessages(state, request);
-
-                // 流式调用 LLM
-                ChatOptions options = getChatOptions(request);
-
-                // 创建收集响应的回调
-                StringBuilder contentBuffer = new StringBuilder();
-                List<ToolCall> collectedToolCalls = new ArrayList<>();
-
-                model.chatStream(messages, options, new StreamCallbackAdapter() {
-                    @Override
-                    public void onToken(String token) {
-                        contentBuffer.append(token);
-                        fullContent.append(token);
-                        callback.onToken(token);
-                    }
-
-                    @Override
-                    public void onToolCall(ToolCall toolCall) {
-                        collectedToolCalls.add(toolCall);
-                        callback.onToolCall(toolCall);
-                    }
-
-                    @Override
-                    public void onComplete() {
-                        callback.onComplete();
-                    }
-                });
-
-                // 创建 AI 消息
-                AIMessage aiMessage = AIMessage.of(contentBuffer.toString(), collectedToolCalls);
-                state = state.addMessage(aiMessage);
-
-                // 检查是否需要调用工具
-                if (!aiMessage.hasToolCalls()) {
-                    break;
-                }
-
-                // 执行工具调用
-                for (ToolCall toolCall : aiMessage.getToolCalls()) {
-                    // 通过中间件验证
-                    boolean allowed = middlewareChain.beforeToolCall(toolCall, context);
-                    if (!allowed || context.isStopped()) {
-                        continue;
-                    }
-
-                    // 执行工具
-                    ToolResult result = toolInvoker.invoke(toolCall);
-
-                    // 通过中间件处理结果
-                    middlewareChain.afterToolCall(toolCall, result, context);
-
-                    // 添加工具消息到状态
-                    ToolMessage toolMessage = result.toMessage();
-                    state = state.addMessage(toolMessage);
-                }
-            }
-
-        } catch (ModelException e) {
-            callback.onError(e);
-            throw AgentExecutionException.modelError("模型调用失败: " + e.getMessage(), e);
-        } catch (Exception e) {
-            callback.onError(e);
-            throw new AgentExecutionException("Agent 流式执行失败: " + e.getMessage(), e);
+        if (strategy instanceof ReActStrategy reactStrategy) {
+            reactStrategy.executeStream(request, callback, executionContext);
+        } else {
+            throw new AgentExecutionException("流式执行暂不支持该策略: " + strategy.getName());
         }
     }
 
-    // ==================== 私有辅助方法 ====================
+    // ==================== Agent 接口实现 ====================
 
     /**
-     * 加载状态
+     * 同步执行 Agent（Agent 接口实现）
+     *
+     * @param request Agent 请求
+     * @return Agent 响应
+     * @throws AgentExecutionException 执行失败
      */
-    private AgentState loadState(String threadId) throws org.cloudnook.knightagent.core.checkpoint.CheckpointException {
-        if (threadId == null || checkpointer == null) {
-            return AgentState.initial();
-        }
-        return checkpointer.loadLatest(threadId).orElse(AgentState.initial());
+    @Override
+    public AgentResponse invoke(AgentRequest request) throws AgentExecutionException {
+        return execute(request);
     }
 
     /**
-     * 构建消息列表
+     * 流式执行 Agent（Agent 接口实现）
+     *
+     * @param request  Agent 请求
+     * @param callback 流式回调
+     * @throws AgentExecutionException 执行失败
      */
-    private List<Message> buildMessages(AgentState state, AgentRequest request) {
-        List<Message> messages = new ArrayList<>();
-
-        // 添加系统提示词
-        String systemPrompt = request.getSystemPrompt() != null
-                ? request.getSystemPrompt()
-                : config.getSystemPrompt();
-        if (systemPrompt != null && !systemPrompt.isBlank()) {
-            messages.add(SystemMessage.of(systemPrompt));
-        }
-
-        // 添加历史消息
-        messages.addAll(state.getMessages());
-
-        return messages;
+    @Override
+    public void stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
+        executeStream(request, callback);
     }
 
     /**
-     * 获取最大迭代次数
+     * 批量执行 Agent（Agent 接口实现）
+     * <p>
+     * 按顺序执行多个请求，返回响应列表。
+     *
+     * @param requests Agent 请求列表
+     * @return Agent 响应列表
+     * @throws AgentExecutionException 执行失败
      */
-    private int getMaxIterations(AgentRequest request) {
-        if (request.getMaxIterations() != null) {
-            return request.getMaxIterations();
+    @Override
+    public List<AgentResponse> batch(List<AgentRequest> requests) throws AgentExecutionException {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
         }
-        return config.getMaxIterations();
+
+        List<AgentResponse> responses = new ArrayList<>();
+        for (AgentRequest request : requests) {
+            responses.add(execute(request));
+        }
+        return responses;
     }
 
     /**
-     * 获取调用选项
+     * 获取 Agent 配置（Agent 接口实现）
+     *
+     * @return Agent 配置
      */
-    private ChatOptions getChatOptions(AgentRequest request) {
-        ChatOptions options = config.getChatOptions();
-        if (options == null) {
-            options = ChatOptions.defaults();
-        }
-        return options;
+    @Override
+    public AgentConfig getConfig() {
+        return config;
     }
 }

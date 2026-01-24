@@ -62,7 +62,7 @@ public interface ChatModel {
      * @return AI 响应消息
      * @throws ModelException 调用失败时抛出
      */
-    AIMessage chat(List<Message> messages, ChatOptions options);
+    AIMessage chat(List<Message> messages, ChatOptions options) throws ModelException;
 
     /**
      * 同步调用模型（使用默认选项）
@@ -71,7 +71,7 @@ public interface ChatModel {
      * @return AI 响应消息
      * @throws ModelException 调用失败时抛出
      */
-    default AIMessage chat(List<Message> messages) {
+    default AIMessage chat(List<Message> messages) throws ModelException {
         return chat(messages, ChatOptions.defaults());
     }
 
@@ -93,7 +93,7 @@ public interface ChatModel {
      * @param callback 流式回调接口
      * @throws ModelException 调用失败时抛出
      */
-    void chatStream(List<Message> messages, ChatOptions options, StreamCallback callback);
+    void chatStream(List<Message> messages, ChatOptions options, StreamCallback callback) throws ModelException;
 
     /**
      * 流式调用模型（使用默认选项）
@@ -102,7 +102,7 @@ public interface ChatModel {
      * @param callback 流式回调接口
      * @throws ModelException 调用失败时抛出
      */
-    default void chatStream(List<Message> messages, StreamCallback callback) {
+    default void chatStream(List<Message> messages, StreamCallback callback) throws ModelException {
         chatStream(messages, ChatOptions.defaults(), callback);
     }
 

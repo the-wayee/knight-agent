@@ -499,6 +499,7 @@ public class OpenAIChatModel implements ChatModel {
     }
 
     @Data
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private static class ChatMessage {
         private final String role;
         private final String content;

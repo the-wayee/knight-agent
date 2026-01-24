@@ -1,9 +1,12 @@
 package org.cloudnook.knightagent.core.model;
 
+import org.cloudnook.knightagent.core.exception.ErrorCode;
+
 /**
  * 模型异常
  * <p>
  * 当调用 LLM 时发生错误时抛出此异常。
+ * 提供统一的错误码支持，便于程序化处理。
  * <p>
  * 常见错误原因：
  * <ul>
@@ -21,11 +24,9 @@ package org.cloudnook.knightagent.core.model;
 public class ModelException extends RuntimeException {
 
     /**
-     * 错误代码
-     * <p>
-     * 用于程序化地识别错误类型。
+     * 错误码
      */
-    private final String errorCode;
+    private final ErrorCode errorCode;
 
     /**
      * HTTP 状态码（如果是 API 调用错误）
@@ -38,7 +39,7 @@ public class ModelException extends RuntimeException {
      * @param message 错误信息
      */
     public ModelException(String message) {
-        this(message, (Throwable) null, null);
+        this(ErrorCode.MODEL_ERROR, message, null, null);
     }
 
     /**
@@ -48,27 +49,28 @@ public class ModelException extends RuntimeException {
      * @param cause   原始异常
      */
     public ModelException(String message, Throwable cause) {
-        this(message, cause, null);
+        this(ErrorCode.MODEL_ERROR, message, cause, null);
     }
 
     /**
-     * 构造函数（带错误代码）
+     * 构造函数（带错误码）
      *
+     * @param errorCode 错误码
      * @param message   错误信息
-     * @param errorCode 错误代码
      */
-    public ModelException(String message, String errorCode) {
-        this(message, errorCode, null);
+    public ModelException(ErrorCode errorCode, String message) {
+        this(errorCode, message, null, null);
     }
 
     /**
-     * 构造函数（带 HTTP 状态码）
+     * 构造函数（带错误码和原因）
      *
-     * @param message        错误信息
-     * @param httpStatusCode HTTP 状态码
+     * @param errorCode 错误码
+     * @param message   错误信息
+     * @param cause     原始异常
      */
-    public ModelException(String message, int httpStatusCode) {
-        this(message, (Throwable) null, httpStatusCode);
+    public ModelException(ErrorCode errorCode, String message, Throwable cause) {
+        this(errorCode, message, cause, null);
     }
 
     /**
@@ -79,30 +81,29 @@ public class ModelException extends RuntimeException {
      * @param httpStatusCode HTTP 状态码
      */
     public ModelException(String message, Throwable cause, Integer httpStatusCode) {
-        super(message, cause);
-        this.errorCode = deriveErrorCode(cause, httpStatusCode);
-        this.httpStatusCode = httpStatusCode;
+        this(deriveErrorCode(cause, httpStatusCode), message, cause, httpStatusCode);
     }
 
     /**
-     * 完整构造函数（带错误代码）
+     * 完整构造函数
      *
+     * @param errorCode      错误码
      * @param message        错误信息
-     * @param errorCode      错误代码
+     * @param cause          原始异常
      * @param httpStatusCode HTTP 状态码
      */
-    public ModelException(String message, String errorCode, Integer httpStatusCode) {
-        super(message);
+    public ModelException(ErrorCode errorCode, String message, Throwable cause, Integer httpStatusCode) {
+        super(message, cause);
         this.errorCode = errorCode;
         this.httpStatusCode = httpStatusCode;
     }
 
     /**
-     * 获取错误代码
+     * 获取错误码
      *
-     * @return 错误代码
+     * @return 错误码
      */
-    public String getErrorCode() {
+    public ErrorCode getErrorCode() {
         return errorCode;
     }
 
@@ -116,56 +117,26 @@ public class ModelException extends RuntimeException {
     }
 
     /**
-     * 从异常和 HTTP 状态码推导错误代码
-     */
-    private String deriveErrorCode(Throwable cause, Integer httpStatusCode) {
-        // 优先使用 HTTP 状态码
-        if (httpStatusCode != null) {
-            return switch (httpStatusCode) {
-                case 400 -> "BAD_REQUEST";
-                case 401 -> "UNAUTHORIZED";
-                case 403 -> "FORBIDDEN";
-                case 404 -> "NOT_FOUND";
-                case 429 -> "RATE_LIMIT_EXCEEDED";
-                case 500, 502, 503, 504 -> "SERVICE_ERROR";
-                default -> "HTTP_ERROR_" + httpStatusCode;
-            };
-        }
-
-        // 其次根据异常类型判断
-        if (cause == null) {
-            return "UNKNOWN_ERROR";
-        }
-
-        String className = cause.getClass().getSimpleName();
-        return switch (className) {
-            case "SocketTimeoutException", "TimeoutException" -> "TIMEOUT";
-            case "ConnectException", "UnknownHostException" -> "CONNECTION_ERROR";
-            case "JsonProcessingException", "JsonParseException" -> "JSON_PARSE_ERROR";
-            case "IOException" -> "IO_ERROR";
-            default -> "EXECUTION_ERROR";
-        };
-    }
-
-    /**
      * 检查是否为认证错误
      */
     public boolean isAuthError() {
-        return "UNAUTHORIZED".equals(errorCode) || "FORBIDDEN".equals(errorCode);
+        return errorCode == ErrorCode.MODEL_UNAUTHORIZED ||
+                (httpStatusCode != null && (httpStatusCode == 401 || httpStatusCode == 403));
     }
 
     /**
      * 检查是否为配额错误
      */
     public boolean isRateLimitError() {
-        return "RATE_LIMIT_EXCEEDED".equals(errorCode);
+        return errorCode == ErrorCode.MODEL_RATE_LIMIT ||
+                (httpStatusCode != null && httpStatusCode == 429);
     }
 
     /**
      * 检查是否为超时错误
      */
     public boolean isTimeout() {
-        return "TIMEOUT".equals(errorCode);
+        return errorCode == ErrorCode.MODEL_TIMEOUT;
     }
 
     /**
@@ -173,8 +144,34 @@ public class ModelException extends RuntimeException {
      */
     public boolean isRetryable() {
         return isTimeout() || isRateLimitError() ||
-                "SERVICE_ERROR".equals(errorCode) ||
-                "CONNECTION_ERROR".equals(errorCode);
+                errorCode == ErrorCode.MODEL_UNAVAILABLE;
+    }
+
+    /**
+     * 从异常和 HTTP 状态码推导错误码
+     */
+    private static ErrorCode deriveErrorCode(Throwable cause, Integer httpStatusCode) {
+        // 优先使用 HTTP 状态码
+        if (httpStatusCode != null) {
+            return switch (httpStatusCode) {
+                case 401, 403 -> ErrorCode.MODEL_UNAUTHORIZED;
+                case 429 -> ErrorCode.MODEL_RATE_LIMIT;
+                case 500, 502, 503, 504 -> ErrorCode.MODEL_UNAVAILABLE;
+                default -> ErrorCode.MODEL_ERROR;
+            };
+        }
+
+        // 其次根据异常类型判断
+        if (cause == null) {
+            return ErrorCode.MODEL_ERROR;
+        }
+
+        String className = cause.getClass().getSimpleName();
+        return switch (className) {
+            case "SocketTimeoutException", "TimeoutException" -> ErrorCode.MODEL_TIMEOUT;
+            case "ConnectException", "UnknownHostException" -> ErrorCode.MODEL_UNAVAILABLE;
+            default -> ErrorCode.MODEL_ERROR;
+        };
     }
 
     // ==================== 静态工厂方法 ====================
@@ -183,34 +180,34 @@ public class ModelException extends RuntimeException {
      * 创建认证失败异常
      */
     public static ModelException unauthorized(String message) {
-        return new ModelException(message, "UNAUTHORIZED", 401);
+        return new ModelException(ErrorCode.MODEL_UNAUTHORIZED, message, null, 401);
     }
 
     /**
      * 创建配额超限异常
      */
     public static ModelException rateLimitExceeded(String message) {
-        return new ModelException(message, "RATE_LIMIT_EXCEEDED", 429);
+        return new ModelException(ErrorCode.MODEL_RATE_LIMIT, message, null, 429);
     }
 
     /**
      * 创建超时异常
      */
     public static ModelException timeout(String message) {
-        return new ModelException(message, "TIMEOUT", null);
+        return new ModelException(ErrorCode.MODEL_TIMEOUT, message);
     }
 
     /**
      * 创建上下文过长异常
      */
     public static ModelException contextTooLong(String message) {
-        return new ModelException(message, "CONTEXT_TOO_LONG", 400);
+        return new ModelException(ErrorCode.MODEL_ERROR, message, null, 400);
     }
 
     /**
      * 创建服务不可用异常
      */
     public static ModelException serviceUnavailable(String message) {
-        return new ModelException(message, "SERVICE_ERROR", 503);
+        return new ModelException(ErrorCode.MODEL_UNAVAILABLE, message, null, 503);
     }
 }

@@ -1,6 +1,7 @@
 package org.cloudnook.knightagent.core.message;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 
 /**
@@ -22,6 +23,7 @@ import lombok.experimental.SuperBuilder;
  * @author KnightAgent
  * @since 1.0.0
  */
+@Getter
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class ToolMessage extends Message {

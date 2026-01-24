@@ -40,7 +40,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testBasicChat() {
+    void testBasicChat() throws ModelException {
         OpenAIChatModel model = createModel();
 
         List<Message> messages = List.of(
@@ -57,7 +57,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testChatWithSystemPrompt() {
+    void testChatWithSystemPrompt() throws ModelException {
         OpenAIChatModel model = createModel();
 
         List<Message> messages = List.of(
@@ -74,7 +74,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testChatWithOptions() {
+    void testChatWithOptions() throws ModelException {
         OpenAIChatModel model = createModel();
 
         ChatOptions options = ChatOptions.builder()
@@ -96,7 +96,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testStreamingChat() {
+    void testStreamingChat() throws ModelException {
         OpenAIChatModel model = createModel();
 
         List<Message> messages = List.of(
@@ -124,7 +124,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testMultiTurnConversation() {
+    void testMultiTurnConversation() throws ModelException {
         OpenAIChatModel model = createModel();
 
         List<Message> messages = List.of(
@@ -143,7 +143,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testCountTokens() {
+    void testCountTokens() throws ModelException {
         OpenAIChatModel model = createModel();
 
         String text = "Hello, this is a test message for token counting.";
@@ -156,7 +156,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testModelCapabilities() {
+    void testModelCapabilities() throws ModelException {
         OpenAIChatModel model = createModel();
 
         ModelCapabilities capabilities = model.getCapabilities();
@@ -173,7 +173,7 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testIsAvailable() {
+    void testIsAvailable() throws ModelException {
         OpenAIChatModel model = createModel();
 
         boolean available = model.isAvailable();
