@@ -355,3 +355,163 @@ Agent agent = new DefaultAgentFactory().createAgent()
 7. **阶段六** ⏳ → 生产就绪特性
 8. **阶段七** ⏳ → 完善和示例
 9. **阶段八** ⏳ → 高级特性（可选）
+
+---
+
+## 🚀 工作流平台开发计划（2026-01-25 新增）
+
+### 项目定位
+开发一个类似 **Dify** 的可视化工作流编排平台，基于 KnightAgent 框架。
+
+### 模块结构
+```
+knight-agent/
+├── src/main/java/org/cloudnook/knightagent/
+│   ├── core/              # Agent 框架（已完成）
+│   ├── workflow/          # 工作流引擎（新增）
+│   └── api/               # REST API（新增）
+└── knight-agent-web/      # 前端项目（独立仓库）
+```
+
+### 开发阶段
+
+#### 阶段 W1：工作流引擎核心
+- [ ] **节点抽象层**
+  - [ ] `WorkflowNode` 接口
+  - [ ] `NodeConfig` 配置类
+  - [ ] `NodeContext` 执行上下文
+  - [ ] `NodeType` 类型枚举
+
+- [ ] **工作流定义**
+  - [ ] `WorkflowDefinition` DSL
+  - [ ] `WorkflowEdge` 连接定义
+  - [ ] `WorkflowParser` JSON 解析器
+  - [ ] 节点依赖拓扑排序
+
+- [ ] **执行引擎**
+  - [ ] `WorkflowEngine` 执行器
+  - [ ] `ExecutionResult` 结果封装
+  - [ ] 同步执行模式
+  - [ ] 错误处理和回滚
+
+#### 阶段 W2：内置节点实现
+- [ ] **基础节点**
+  - [ ] `InputNode` - 输入节点
+  - [ ] `OutputNode` - 输出节点
+  - [ ] `CodeNode` - JavaScript 代码执行
+  - [ ] `ConditionNode` - 条件分支
+
+- [ ] **Agent 节点**
+  - [ ] `AgentNode` - 集成 Agent 框架
+  - [ ] 支持提示词配置
+  - [ ] 支持 MCP 工具选择
+  - [ ] 支持模型参数配置
+
+- [ ] **工具节点**
+  - [ ] `ToolNode` - 单独工具调用
+  - [ ] `HttpNode` - HTTP 请求
+
+#### 阶段 W3：后端 API
+- [ ] **工作流 CRUD**
+  - [ ] `WorkflowController`
+  - [ ] `WorkflowService`
+  - [ ] `WorkflowRepository`（PostgreSQL）
+  - [ ] 版本管理
+
+- [ ] **执行 API**
+  - [ ] `ExecutionController`
+  - [ ] 同步执行接口
+  - [ ] 执行历史查询
+
+- [ ] **WebSocket 支持**
+  - [ ] `WebSocketController`
+  - [ ] 流式推送执行状态
+  - [ ] 节点进度通知
+
+- [ ] **MCP 集成**
+  - [ ] MCP 服务器管理
+  - [ ] 工具列表查询
+  - [ ] 工具动态加载
+
+#### 阶段 W4：前端开发（v0.dev）
+- [ ] **基础框架**
+  - [ ] Next.js 15 项目初始化
+  - [ ] shadcn/ui 组件库
+  - [ ] TypeScript 配置
+
+- [ ] **画布组件**
+  - [ ] ReactFlow 集成
+  - [ ] 节点拖拽
+  - [ ] 连线创建
+  - [ ] 缩放/平移控制
+  - [ ] 网格背景
+
+- [ ] **节点组件**
+  - [ ] 节点卡片渲染
+  - [ ] 节点类型图标
+  - [ ] 输入/输出锚点
+  - [ ] 节点状态显示
+
+- [ ] **配置面板**
+  - [ ] Agent 节点配置
+    - [ ] 提示词编辑器（Monaco Editor）
+    - [ ] MCP 工具多选
+    - [ ] 模型参数表单
+  - [ ] 其他节点配置
+
+#### 阶段 W5：前后端联调
+- [ ] **API 集成**
+  - [ ] 工作流保存/加载
+  - [ ] 执行触发
+  - [ ] WebSocket 连接
+
+- [ ] **执行监控**
+  - [ ] 实时节点状态
+  - [ ] 流式输出显示
+  - [ ] 错误提示
+
+#### 阶段 W6：完善和优化
+- [ ] **用户体验**
+  - [ ] 快捷键支持
+  - [ ] 撤销/重做
+  - [ ] 复制/粘贴节点
+  - [ ] 画布导出（PNG）
+
+- [ ] **高级功能**
+  - [ ] 工作流模板
+  - [ ] 节点分组
+  - [ ] 执行日志
+  - [ ] 性能监控
+
+### API 接口定义
+
+```java
+// 工作流定义（保存格式）
+{
+  "id": "wf_xxx",
+  "name": "示例工作流",
+  "description": "描述",
+  "nodes": [
+    {
+      "id": "node_1",
+      "type": "agent",
+      "position": { "x": 100, "y": 100 },
+      "config": {
+        "model": "gpt-4",
+        "systemPrompt": "你是一个助手",
+        "mcpTools": ["tool1", "tool2"],
+        "temperature": 0.7
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1",
+      "source": "node_1",
+      "target": "node_2",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    }
+  ]
+}
+```

@@ -1,11 +1,67 @@
-# CLAUDE.md
+c lu# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+## 项目愿景
+
+**KnightAgent** 的使命是成为 **最易用的 Java AI Agent 与工作流平台**。
+
+我们相信 AI Agent 的力量不应该被编程门槛所限制。KnightAgent 让：
+- **开发者** 可以通过代码快速构建复杂的 Agent 应用
+- **非技术用户** 可以通过可视化界面拖拽创建 AI 工作流
+- **企业** 可以将 AI 能力集成到现有业务流程中
+
+### 核心价值
+
+| 价值 | 描述 |
+|------|------|
+| **低门槛** | 拖拽式编排，无需编码即可创建 AI 应用 |
+| **高灵活性** | 支持代码扩展，满足复杂定制需求 |
+| **可扩展** | MCP 协议连接无限外部工具 |
+| **生产就绪** | 企业级持久化、监控、版本管理 |
+
+### 与 Dify 的差异
+
+| 特性 | Dify | KnightAgent |
+|------|------|-------------|
+| 后端语言 | Python | **Java** |
+| 目标用户 | 业务用户 | **开发者 + 业务用户** |
+| 编程模型 | 闭源 | **开源框架** |
+| 部署方式 | 云服务为主 | **私有化部署友好** |
+| MCP 支持 | 部分 | **完整支持** |
+
+### 理想使用场景
+
+```
+场景 1: 开发者快速原型
+├── 用 Java 代码创建 Agent
+├── 配置 MCP 工具连接数据源
+└── 通过 API 集成到现有系统
+
+场景 2: 业务用户自动化流程
+├── 拖拽创建工作流
+├── 配置 Agent 提示词
+└── 一键执行，实时查看结果
+
+场景 3: 企业级 AI 平台
+├── 多用户协作
+├── 工作流版本管理
+└── 私有化部署，数据安全
+```
+
+---
+
 ## 项目概述
 
-KnightAgent 是一个轻量级的 Java Agent 框架，参考 2025 年 10 月底发布的 LangChain 架构设计。项目目标是提供 LangChain 的 Java 替代方案，支持：
+**KnightAgent** 是一个 **Agent & Workflow 可视化平台**，提供：
 
+1. **Agent 框架**（core/）- 轻量级 Java Agent 框架，参考 2025 年 10 月底发布的 LangChain 架构设计
+2. **工作流引擎**（workflow/）- 可视化工作流编排和执行引擎
+3. **Web 平台**（api/ + web/）- 前后端分离的 No-Code/Low-Code 平台
+
+### Agent 框架能力
 - **流式返回** - 实时 token 流式输出
 - **Agent 创建** - `create_agent` 风格的工厂方法
 - **工具调用** - 函数/工具调用能力
@@ -15,6 +71,14 @@ KnightAgent 是一个轻量级的 Java Agent 框架，参考 2025 年 10 月底�
 - **运行时状态持久化** - 自定义状态的序列化
 - **Checkpoint 机制** - 基于 Thread 的状态快照：时间旅行、人机协作、容错恢复
 - **Multi-Agent 协作** - 多 Agent 协作完成复杂任务
+- **MCP 协议** - Model Context Protocol 支持，连接外部工具
+
+### 工作流平台能力
+- **可视化编排** - 拖拽式节点画布（类似 Dify、LangFlow）
+- **多种节点类型** - Agent 节点、代码节点、条件分支、工具调用、HTTP 请求等
+- **自定义配置** - Agent 节点支持自定义提示词、MCP 工具、模型参数
+- **实时执行** - WebSocket 流式返回执行结果
+- **版本管理** - 工作流版本控制和历史记录
 
 ## 技术栈
 
@@ -24,7 +88,14 @@ KnightAgent 是一个轻量级的 Java Agent 框架，参考 2025 年 10 月底�
 - **Lombok** - 代码生成
 - **Maven** - 构建工具
 
-**架构选择：单模块 Maven 项目**（暂未分模块，按需拆分）
+**架构选择：多模块 Maven 项目**
+```
+knight-agent/
+├── knight-agent-core/     # Agent 框架（已完成）
+├── knight-agent-workflow/ # 工作流引擎（开发中）
+├── knight-agent-api/      # 后端 REST API（开发中）
+└── knight-agent-web/      # 前端项目（独立仓库，开发中）
+```
 
 ---
 
@@ -349,6 +420,150 @@ MultiAgentSystem system = MultiAgentSystem.builder()
 AgentResponse response = system.invoke(
     AgentRequest.of("我需要一个 Java 工具类来计算日期差")
 );
+```
+
+---
+
+## 工作流平台架构（开发中）
+
+### 项目目标
+开发一个类似 **Dify** 的可视化工作流编排平台，支持：
+- 拖拽式节点编排
+- Agent 节点自定义配置（提示词、MCP 工具、模型参数）
+- 实时流式执行（WebSocket）
+- 工作流版本管理
+- 执行历史追踪
+
+### 技术选型
+
+#### 后端（Java）
+```
+knight-agent-workflow/     # 工作流引擎模块
+├── workflow/
+│   ├── node/             # 节点抽象
+│   │   ├── WorkflowNode      # 节点接口
+│   │   ├── NodeConfig        # 节点配置
+│   │   ├── NodeContext       # 执行上下文
+│   │   └── NodeType          # 节点类型枚举
+│   ├── edge/             # 连接边
+│   │   ├── WorkflowEdge      # 边定义
+│   │   └── EdgeCondition     # 条件表达式
+│   ├── definition/       # 工作流定义
+│   │   ├── WorkflowDefinition # 工作流 DSL
+│   │   └── WorkflowParser     # JSON/解析器
+│   ├── engine/           # 执行引擎
+│   │   ├── WorkflowEngine     # 执行引擎
+│   │   ├── ExecutionResult    # 执行结果
+│   │   └── ExecutionContext   # 执行上下文
+│   └── nodes/            # 内置节点实现
+│       ├── AgentNode         # Agent 节点
+│       ├── CodeNode          # 代码节点
+│       ├── ConditionNode     # 条件分支
+│       ├── ToolNode          # 工具调用节点
+│       ├── InputNode         # 输入节点
+│       ├── OutputNode        # 输出节点
+│       └── HttpNode          # HTTP 请求节点
+
+knight-agent-api/          # REST API 模块
+├── controller/
+│   ├── WorkflowController      # 工作流 CRUD
+│   ├── ExecutionController     # 执行控制
+│   └── WebSocketController     # 流式推送
+├── service/
+│   ├── WorkflowService         # 业务逻辑
+│   └── ExecutionService        # 执行服务
+├── repository/
+│   ├── WorkflowRepository      # 持久化
+│   └── ExecutionRepository     # 执行历史
+└── dto/
+    ├── WorkflowDTO             # 数据传输对象
+    └── ExecutionDTO
+```
+
+#### 前端（Next.js + shadcn/ui）
+```
+knight-agent-web/
+├── app/
+│   ├── page.tsx              # 首页（工作流列表）
+│   ├── workflow/
+│   │   ├── [id]/page.tsx     # 工作流编辑器
+│   │   └── new/page.tsx      # 新建工作流
+│   └── api/                  # API 路由（可选）
+├── components/
+│   ├── canvas/               # 画布组件
+│   │   ├── WorkflowCanvas.tsx        # 主画布
+│   │   ├── NodeComponent.tsx         # 节点渲染
+│   │   ├── EdgeComponent.tsx         # 连接线
+│   │   └── Controls.tsx              # 缩放/平移
+│   ├── nodes/                # 节点组件
+│   │   ├── AgentNode.tsx             # Agent 节点配置
+│   │   ├── CodeNode.tsx              # 代码节点配置
+│   │   ├── ConditionNode.tsx         # 条件节点
+│   │   ├── ToolNode.tsx              # 工具节点
+│   │   └── IoNode.tsx                # 输入输出节点
+│   ├── panels/              # 配置面板
+│   │   ├── NodeConfigPanel.tsx       # 节点配置
+│   │   ├── AgentConfigPanel.tsx      # Agent 详细配置
+│   │   └── ExecutionPanel.tsx        # 执行监控
+│   └── ui/                  # shadcn/ui 组件
+├── lib/
+│   ├── api.ts               # API 客户端
+│   ├── workflow.ts          # 工作流类型
+│   └── websocket.ts         # WebSocket 客户端
+└── hooks/
+    ├── useWorkflow.ts       # 工作流操作
+    └── useExecution.ts      # 执行状态
+```
+
+### 节点类型设计
+
+| 节点类型 | 功能 | 配置项 |
+|---------|------|--------|
+| **InputNode** | 工作流输入 | 输入参数 Schema 定义 |
+| **OutputNode** | 工作流输出 | 输出映射配置 |
+| **AgentNode** | Agent 执行 | 模型、提示词、MCP 工具、温度、最大 Token |
+| **CodeNode** | 自定义代码 | JavaScript 代码片段、输入输出变量 |
+| **ConditionNode** | 条件分支 | 条件表达式、分支路由 |
+| **ToolNode** | 工具调用 | 选择工具、参数映射 |
+| **HttpNode** | HTTP 请求 | URL、Method、Headers、Body |
+| **LoopNode** | 循环执行 | 循环条件、最大次数 |
+
+### API 设计（草案）
+
+```typescript
+// 工作流 CRUD
+GET    /api/workflows              # 列表
+GET    /api/workflows/:id          # 详情
+POST   /api/workflows              # 创建
+PUT    /api/workflows/:id          # 更新
+DELETE /api/workflows/:id          # 删除
+
+// 执行控制
+POST   /api/workflows/:id/execute  # 同步执行
+POST   /api/workflows/:id/stream   # 流式执行（WebSocket）
+GET    /api/executions/:id         # 执行状态
+GET    /api/workflows/:id/versions # 版本列表
+
+// MCP 工具
+GET    /api/mcp/tools              # 可用 MCP 工具列表
+POST   /api/mcp/servers            # 添加 MCP 服务器
+```
+
+### WebSocket 协议（草案）
+
+```typescript
+// 客户端 → 服务端
+{ "type": "execute", "workflowId": "xxx", "input": {...} }
+{ "type": "pause", "executionId": "xxx" }
+{ "type": "stop", "executionId": "xxx" }
+
+// 服务端 → 客户端
+{ "type": "node_start", "nodeId": "xxx", "nodeName": "Agent" }
+{ "type": "token", "nodeId": "xxx", "text": "..." }
+{ "type": "tool_call", "nodeId": "xxx", "tool": "..." }
+{ "type": "node_complete", "nodeId": "xxx", "output": {...} }
+{ "type": "error", "nodeId": "xxx", "error": "..." }
+{ "type": "complete", "result": {...} }
 ```
 
 ---
