@@ -164,10 +164,10 @@
   - 增强提示词模板
   - 适用于知识库问答
 
-- [ ] **Multi-Agent System（多 Agent 协作）**
-  - Supervisor 模式（主控 Agent）
-  - Peer 模式（平等协作）
-  - 手off 机制
+- [x] **Multi-Agent System（多 Agent 协作）**
+  - [x] Supervisor 模式（主控 Agent）
+  - [x] Peer 模式（平等协作）
+  - [x] 手off 机制
   - 适用于复杂任务分工
 
 - [ ] **Agentic Workflow（工作流 Agent）**
@@ -246,6 +246,8 @@
 - ✅ 统一异常系统（`KnightAgentException` + `ErrorCode`）
 - ✅ 修复 `AIMessage` 不可变性
 - ✅ **完成阶段四：中间件系统（4 个内置中间件）**
+- ✅ **完成 Multi-Agent System（多 Agent 协作）**
+- ✅ **完成真实 API 集成测试（Multi-Agent）**
 
 ### 新增文件
 - `core/agent/strategy/` - 执行策略（3 个文件）
@@ -257,10 +259,28 @@
   - `SummarizationMiddleware` - 对话摘要
   - `HumanInTheLoopMiddleware` - 人机协作
   - `StateInjectionMiddleware` - 状态注入
+- `core/multiagent/` - 多 Agent 系统（5 个文件）：
+  - `AgentNode` - Agent 节点包装
+  - `AgentHandoff` - 手 off 消息
+  - `HandoffStrategy` - 策略接口
+  - `SupervisorStrategy` - LLM 路由策略
+  - `MultiAgentSystem` - 多 Agent 协调器
 - `test/core/agent/` - 测试类（3 个文件）：
   - `AgentIntegrationTest` - Mock 模型集成测试（18 个测试用例）
   - `OpenAIIntegrationTest` - 真实 API 集成测试
   - `MockWeatherTool` - 测试用工具
+- `test/examples/` - 示例类（3 个文件）：
+  - `StateInjectionExample` - 状态注入中间件示例（8 个示例）
+  - `MultiAgentExample` - 多 Agent 系统示例（5 个示例）
+  - `OpenAIMultiAgentTest` - Multi-Agent 真实 API 测试（7 个测试用例）
+
+### Multi-Agent 系统测试结果
+
+| 测试用例 | 耗时 | 结果 |
+|---------|------|------|
+| 基础双 Agent 协作 | 2334ms | ✅ 成功 |
+| 三 Agent 工作流（分析→开发→审查） | 3066ms | ✅ 成功 |
+| 专业分工（搜索→写作） | 2935ms | ✅ 成功 |
 
 ### 下一步计划
 1. **运行真实 API 测试** - 验证与 OpenAI 的集成
