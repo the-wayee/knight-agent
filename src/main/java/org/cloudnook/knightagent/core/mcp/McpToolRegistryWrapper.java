@@ -1,6 +1,6 @@
 package org.cloudnook.knightagent.core.mcp;
 
-import org.cloudnook.knightagent.core.tool.Tool;
+import org.cloudnook.knightagent.core.tool.McpTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +21,7 @@ public class McpToolRegistryWrapper implements AutoCloseable {
 
     private final McpConfig config;
     private final McpClientWrapper client;
-    private final List<Tool> registeredTools = new ArrayList<>();
+    private final List<McpTool> registeredTools = new ArrayList<>();
     private boolean initialized = false;
 
     /**
@@ -82,7 +82,7 @@ public class McpToolRegistryWrapper implements AutoCloseable {
         List<McpToolDescription> tools = client.listTools();
 
         for (McpToolDescription toolDesc : tools) {
-            Tool tool = new McpToolWrapper(client, toolDesc);
+            McpTool tool = new McpToolWrapper(client, toolDesc);
             registeredTools.add(tool);
             log.debug("注册 MCP 工具: {} - {}", toolDesc.getName(), toolDesc.getDescription());
         }
@@ -123,7 +123,7 @@ public class McpToolRegistryWrapper implements AutoCloseable {
     /**
      * 获取已注册的工具列表
      */
-    public List<Tool> getRegisteredTools() {
+    public List<McpTool> getRegisteredTools() {
         return new ArrayList<>(registeredTools);
     }
 

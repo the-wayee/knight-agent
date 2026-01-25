@@ -21,7 +21,15 @@ public class NodeContext {
     /**
      * 当前节点ID
      */
+    /**
+     * 当前节点ID
+     */
     private String nodeId;
+
+    /**
+     * 事件消费者 (用于发送实时事件)
+     */
+    private java.util.function.Consumer<org.cloudnook.knightagent.workflow.engine.ExecutionEvent> eventConsumer;
 
     /**
      * 工作流输入数据

@@ -10,7 +10,7 @@ import org.cloudnook.knightagent.core.message.ToolResult;
  * <p>
  * 实现此接口来创建自定义工具：
  * <pre>{@code
- * public class WeatherTool implements Tool {
+ * public class WeatherTool implements McpTool {
  *
  *     @Override
  *     public String getName() {
@@ -52,7 +52,8 @@ import org.cloudnook.knightagent.core.message.ToolResult;
  * @author KnightAgent
  * @since 1.0.0
  */
-public interface Tool {
+
+public interface McpTool {
 
     /**
      * 获取工具名称
@@ -137,6 +138,25 @@ public interface Tool {
      * @throws ToolExecutionException 执行过程中的错误
      */
     ToolResult execute(String arguments) throws ToolExecutionException;
+
+    /**
+     * 获取参数定义对象
+     * <p>
+     * 返回用于序列化的参数定义对象（通常是 Map 或 POJO）。
+     * 默认实现尝试返回 JSON Schema 字符串（具体序列化由调用方处理，建议重写此方法返回 Map）。
+     *
+     * @return 参数定义对象
+     */
+    default Object getParameters() {
+        // 简单实现返回 Schema 字符串
+        // 注意：调用方（如 OpenAIChatModel）可能需要将其解析为 JSON 对象而不是字符串
+        // 这里为了兼容性，建议具体实现类重写此方法返回 Map<String, Object>
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readTree(getParametersSchema());
+        } catch (Exception e) {
+            return getParametersSchema();
+        }
+    }
 
     /**
      * 判断工具是否需要身份验证

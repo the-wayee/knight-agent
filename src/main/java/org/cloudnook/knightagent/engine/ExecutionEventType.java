@@ -16,4 +16,6 @@ public enum ExecutionEventType {
 
     // 流式输出
     TOKEN,
+    TOOL_CALL,
+    REASONING,
 }

@@ -144,7 +144,7 @@ public class MultiAgentSystem implements Agent {
     }
 
     @Override
-    public void stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
+    public AgentResponse stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
         // 简化实现：使用同步调用 + 分块推送
         AgentResponse response = invoke(request);
         String output = response.getOutput();
@@ -159,6 +159,8 @@ public class MultiAgentSystem implements Agent {
             }
             callback.onComplete();
         }
+        
+        return response;
     }
 
     @Override

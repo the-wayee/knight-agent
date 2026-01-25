@@ -14,7 +14,7 @@ import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.mcp.McpConfig;
 import org.cloudnook.knightagent.core.mcp.McpToolRegistryWrapper;
-import org.cloudnook.knightagent.core.tool.Tool;
+import org.cloudnook.knightagent.core.tool.McpTool;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +52,7 @@ public class AgentBuilder {
 
     @Getter
     @Setter
-    private List<Tool> tools;
+    private List<McpTool> tools;
 
     @Getter
     @Setter
@@ -91,7 +91,7 @@ public class AgentBuilder {
      * @param tools 工具列表
      * @return this
      */
-    public AgentBuilder tools(List<Tool> tools) {
+    public AgentBuilder tools(List<McpTool> tools) {
         this.tools = tools;
         return this;
     }
@@ -102,7 +102,7 @@ public class AgentBuilder {
      * @param tool 工具
      * @return this
      */
-    public AgentBuilder tool(Tool tool) {
+    public AgentBuilder tool(McpTool tool) {
         if (this.tools == null) {
             this.tools = new ArrayList<>();
         }
@@ -252,7 +252,7 @@ public class AgentBuilder {
                     McpToolRegistryWrapper registry = new McpToolRegistryWrapper(mcpConfig);
                     registry.initialize();
 
-                    List<Tool> mcpTools = registry.getRegisteredTools();
+                    List<McpTool> mcpTools = registry.getRegisteredTools();
                     toolInvoker.registerAll(mcpTools);
 
                     mcpRegistries.add(registry);

@@ -8,7 +8,7 @@ import org.cloudnook.knightagent.core.message.*;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.state.AgentState;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
-import org.cloudnook.knightagent.core.tool.Tool;
+import org.cloudnook.knightagent.core.tool.McpTool;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 import org.cloudnook.knightagent.core.middleware.Middleware;
 import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
@@ -57,7 +57,7 @@ public class AgentExecutor implements Agent {
 
     // 向后兼容的遗留字段
     private final ChatModel model;
-    private final List<Tool> tools;
+    private final List<McpTool> tools;
     private final ToolInvoker toolInvoker;
     private final Checkpointer checkpointer;
     private final AgentConfig config;
@@ -92,7 +92,7 @@ public class AgentExecutor implements Agent {
      * @param middlewares  中间件列表
      */
     @SuppressWarnings("unused")
-    public AgentExecutor(ChatModel model, List<Tool> tools, Checkpointer checkpointer,
+    public AgentExecutor(ChatModel model, List<McpTool> tools, Checkpointer checkpointer,
                           AgentConfig config, List<Middleware> middlewares) {
         // 使用默认 ReAct 策略
         this.strategy = new ReActStrategy();
@@ -136,11 +136,12 @@ public class AgentExecutor implements Agent {
      *
      * @param request  Agent 请求
      * @param callback 流式回调
+     * @return Agent 响应
      * @throws AgentExecutionException 执行失败
      */
-    public void executeStream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
+    public AgentResponse executeStream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
         if (strategy instanceof ReActStrategy reactStrategy) {
-            reactStrategy.executeStream(request, callback, executionContext);
+            return reactStrategy.executeStream(request, callback, executionContext);
         } else {
             throw new AgentExecutionException("流式执行暂不支持该策略: " + strategy.getName());
         }
@@ -165,11 +166,12 @@ public class AgentExecutor implements Agent {
      *
      * @param request  Agent 请求
      * @param callback 流式回调
+     * @return Agent 响应
      * @throws AgentExecutionException 执行失败
      */
     @Override
-    public void stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
-        executeStream(request, callback);
+    public AgentResponse stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
+        return executeStream(request, callback);
     }
 
     /**

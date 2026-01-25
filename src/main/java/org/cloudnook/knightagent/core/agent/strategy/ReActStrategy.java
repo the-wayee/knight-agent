@@ -99,6 +99,12 @@ public class ReActStrategy implements ExecutionStrategy {
 
                 // 调用 LLM
                 ChatOptions options = getChatOptions(config);
+                // 注入可用工具
+                if (toolInvoker.getTools() != null && !toolInvoker.getTools().isEmpty()) {
+                    options = options.toBuilder()
+                            .tools(toolInvoker.getTools())
+                            .build();
+                }
                 finalMessage = model.chat(messages, options);
 
                 // 添加 AI 消息到状态
@@ -177,7 +183,7 @@ public class ReActStrategy implements ExecutionStrategy {
     /**
      * 流式执行（可选实现）
      */
-    public void executeStream(AgentRequest request, StreamCallback callback, ExecutionContext context)
+    public AgentResponse executeStream(AgentRequest request, StreamCallback callback, ExecutionContext context)
             throws AgentExecutionException {
         long startTime = System.currentTimeMillis();
         Instant startInstant = Instant.now();
@@ -215,6 +221,12 @@ public class ReActStrategy implements ExecutionStrategy {
 
                 // 流式调用 LLM
                 ChatOptions options = getChatOptions(config);
+                // 注入可用工具
+                if (toolInvoker.getTools() != null && !toolInvoker.getTools().isEmpty()) {
+                    options = options.toBuilder()
+                            .tools(toolInvoker.getTools())
+                            .build();
+                }
 
                 // 创建收集响应的回调
                 StringBuilder contentBuffer = new StringBuilder();
@@ -236,7 +248,9 @@ public class ReActStrategy implements ExecutionStrategy {
 
                     @Override
                     public void onComplete() {
-                        callback.onComplete();
+                         // 这里的 response 是 Model 层的，我们主要关注上面的 token/toolCall Accumulation
+                         // 通常 ChatModel 的 stream 不会给完整 response，而是 onComplete()
+                         // 所以保持适配器默认行为即可
                     }
                 });
 
@@ -268,6 +282,22 @@ public class ReActStrategy implements ExecutionStrategy {
                     state = state.addMessage(toolMessage);
                 }
             }
+
+            // 构建最终响应
+            AgentResponse response = AgentResponse.builder()
+                    .output(fullContent.toString())
+                    .messages(state.getMessages())
+                    .state(state)
+                    .threadId(request.getThreadId())
+                    .durationMs(System.currentTimeMillis() - startTime)
+                    .startTime(startInstant)
+                    .endTime(Instant.now())
+                    .build();
+
+            // 完成回调
+            callback.onComplete();
+            
+            return response;
 
         } catch (org.cloudnook.knightagent.core.model.ModelException e) {
             callback.onError(e);

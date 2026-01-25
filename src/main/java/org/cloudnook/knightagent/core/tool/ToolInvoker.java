@@ -58,7 +58,7 @@ public class ToolInvoker {
      * Key: 工具名称
      * Value: 工具实例
      */
-    private final Map<String, Tool> tools;
+    private final Map<String, McpTool> tools;
 
     /**
      * 异步执行线程池
@@ -77,7 +77,7 @@ public class ToolInvoker {
      *
      * @param tools 初始工具集合
      */
-    public ToolInvoker(Collection<Tool> tools) {
+    public ToolInvoker(Collection<McpTool> tools) {
         this(tools, null);
     }
 
@@ -87,7 +87,7 @@ public class ToolInvoker {
      * @param tools           初始工具集合
      * @param executorService 自定义线程池（为 null 时使用默认线程池）
      */
-    public ToolInvoker(Collection<Tool> tools, ExecutorService executorService) {
+    public ToolInvoker(Collection<McpTool> tools, ExecutorService executorService) {
         this.tools = new ConcurrentHashMap<>();
         this.executorService = executorService != null
                 ? executorService
@@ -106,7 +106,7 @@ public class ToolInvoker {
      * @param tool 要注册的工具
      * @return this，支持链式调用
      */
-    public ToolInvoker register(Tool tool) {
+    public ToolInvoker register(McpTool tool) {
         if (tool == null) {
             throw new IllegalArgumentException("工具不能为 null");
         }
@@ -125,7 +125,7 @@ public class ToolInvoker {
      * @param tools 工具集合
      * @return this，支持链式调用
      */
-    public ToolInvoker registerAll(Collection<Tool> tools) {
+    public ToolInvoker registerAll(Collection<McpTool> tools) {
         if (tools != null) {
             tools.forEach(this::register);
         }
@@ -138,8 +138,8 @@ public class ToolInvoker {
      * @param toolName 工具名称
      * @return 被移除的工具，如果不存在返回 null
      */
-    public Tool unregister(String toolName) {
-        Tool removed = tools.remove(toolName);
+    public McpTool unregister(String toolName) {
+        McpTool removed = tools.remove(toolName);
         if (removed != null) {
             log.debug("注销工具: {}", toolName);
         }
@@ -175,6 +175,15 @@ public class ToolInvoker {
     }
 
     /**
+     * 获取已注册的工具列表
+     *
+     * @return 工具列表
+     */
+    public List<McpTool> getTools() {
+        return List.copyOf(tools.values());
+    }
+
+    /**
      * 执行工具调用
      * <p>
      * 根据工具调用信息查找对应工具并执行。
@@ -192,7 +201,7 @@ public class ToolInvoker {
         }
 
         String toolName = toolCall.getName();
-        Tool tool = tools.get(toolName);
+        McpTool tool = tools.get(toolName);
 
         if (tool == null) {
             log.warn("工具不存在: {}", toolName);

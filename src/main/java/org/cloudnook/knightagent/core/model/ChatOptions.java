@@ -161,6 +161,13 @@ public class ChatOptions {
     private boolean streamEnabled = true;
 
     /**
+     * 可用工具列表
+     * <p>
+     * 传递给模型的可调用工具定义。
+     */
+    private List<org.cloudnook.knightagent.core.tool.McpTool> tools;
+
+    /**
      * 获取默认选项
      *
      * @return 默认的 ChatOptions 实例

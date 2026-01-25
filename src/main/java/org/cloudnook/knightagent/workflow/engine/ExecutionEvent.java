@@ -143,6 +143,30 @@ public class ExecutionEvent {
     }
 
     /**
+     * 创建工具调用事件
+     */
+    public static ExecutionEvent toolCall(String executionId, String nodeId, String toolName, String arguments) {
+        return ExecutionEvent.builder()
+                .type(EventType.TOOL_CALL)
+                .executionId(executionId)
+                .nodeId(nodeId)
+                .data(Map.of("tool", toolName, "arguments", arguments))
+                .build();
+    }
+
+    /**
+     * 创建思考过程事件
+     */
+    public static ExecutionEvent reasoning(String executionId, String nodeId, String text) {
+        return ExecutionEvent.builder()
+                .type(EventType.REASONING)
+                .executionId(executionId)
+                .nodeId(nodeId)
+                .data(Map.of("text", text))
+                .build();
+    }
+
+    /**
      * 事件类型枚举
      */
     public enum EventType {
@@ -158,5 +182,7 @@ public class ExecutionEvent {
 
         // 流式输出
         TOKEN,
+        TOOL_CALL,
+        REASONING,
     }
 }

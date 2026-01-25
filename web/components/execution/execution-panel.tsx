@@ -213,7 +213,7 @@ export function ExecutionPanel({ workflowId, nodes, edges, onClose, onSaveBefore
                 nodeId: event.nodeId,
                 nodeName: event.nodeName,
                 type: "progress",
-                message: (event.data?.token as string) || "",
+                message: (event.data?.text as string) || "",
               })
               break
             case "workflow_completed":
@@ -239,6 +239,28 @@ export function ExecutionPanel({ workflowId, nodes, edges, onClose, onSaveBefore
               completed = true
               setIsRunning(false)
               cleanup() // 立即清理连接
+              break
+            case "tool_call":
+              const toolName = event.data?.tool as string
+              const toolArgs = event.data?.arguments as string
+              addLog({
+                nodeId: event.nodeId,
+                nodeName: event.nodeName,
+                type: "info",
+                message: `Calling Tool: ${toolName}`,
+                data: toolArgs,
+                icon: <div className="h-4 w-4 text-purple-500">🛠️</div>, // 使用Emoji作为工具图标，或者导入 Lucide 图标
+              })
+              break
+            case "reasoning":
+              addLog({
+                nodeId: event.nodeId,
+                nodeName: event.nodeName,
+                type: "info",
+                message: "Thinking...",
+                data: event.data?.text,
+                icon: <div className="h-4 w-4 text-yellow-500">🤔</div>,
+              })
               break
           }
         }

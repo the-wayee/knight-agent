@@ -5,12 +5,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.cloudnook.knightagent.core.message.AIMessage;
 import org.cloudnook.knightagent.core.message.HumanMessage;
 import org.cloudnook.knightagent.core.message.Message;
 import org.cloudnook.knightagent.core.message.SystemMessage;
 import org.cloudnook.knightagent.core.message.ToolCall;
+import org.cloudnook.knightagent.core.message.ToolMessage;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 
 import java.io.IOException;
@@ -272,15 +274,17 @@ public class OpenAIChatModel implements ChatModel {
             chatMessages.add(convertMessage(message));
         }
 
-        return new ChatRequest(
-                modelId,
-                chatMessages,
-                stream,
-                options.getTemperature(),
-                options.getTopP(),
-                options.getMaxTokens(),
-                options.getStopSequences()
-        );
+        return ChatRequest.builder()
+                .model(modelId)
+                .messages(chatMessages)
+                .stream(stream)
+                .temperature(options.getTemperature())
+                .topP(options.getTopP())
+                .maxTokens(options.getMaxTokens())
+                .stop(options.getStopSequences())
+                .tools(options.getTools() != null ? convertTools(options.getTools()) : null)
+                .toolChoice(options.getTools() != null ? "auto" : null)
+                .build();
     }
 
     private ChatMessage convertMessage(Message message) {
@@ -295,13 +299,17 @@ public class OpenAIChatModel implements ChatModel {
             return new ChatMessage(role, aiMessage.getContent(), null, null, convertToolCalls(aiMessage.getToolCalls()));
         }
 
+        if (message instanceof ToolMessage toolMessage) {
+            return new ChatMessage(role, toolMessage.getContent(), null, toolMessage.getToolCallId(), null);
+        }
+
         return new ChatMessage(role, message.getContent(), null, null, null);
     }
 
     private List<ChatToolCall> convertToolCalls(List<ToolCall> toolCalls) {
         List<ChatToolCall> result = new ArrayList<>();
         for (ToolCall toolCall : toolCalls) {
-            ChatToolFunction function = new ChatToolFunction(toolCall.getName(), toolCall.getArguments());
+            ChatToolCallFunction function = new ChatToolCallFunction(toolCall.getName(), toolCall.getArguments());
             result.add(new ChatToolCall(toolCall.getId(), "function", function));
         }
         return result;
@@ -482,9 +490,25 @@ public class OpenAIChatModel implements ChatModel {
         }
     }
 
+    private List<ChatTool> convertTools(List<org.cloudnook.knightagent.core.tool.McpTool> tools) {
+        List<ChatTool> result = new ArrayList<>();
+        for (org.cloudnook.knightagent.core.tool.McpTool tool : tools) {
+            ChatToolFunction function = new ChatToolFunction(
+                    tool.getName(),
+                    tool.getDescription(),
+                    tool.getParameters()
+            );
+            result.add(new ChatTool("function", function));
+        }
+        return result;
+    }
+
+    // ==================== DTO 类 ====================
+
     // ==================== DTO 类 ====================
 
     @Data
+    @lombok.Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private static class ChatRequest {
         private final String model;
@@ -496,6 +520,9 @@ public class OpenAIChatModel implements ChatModel {
         @JsonProperty("max_tokens")
         private final Integer maxTokens;
         private final List<String> stop;
+        private final List<ChatTool> tools;
+        @JsonProperty("tool_choice")
+        private final String toolChoice;
     }
 
     @Data
@@ -511,15 +538,28 @@ public class OpenAIChatModel implements ChatModel {
     }
 
     @Data
+    private static class ChatTool {
+        private final String type;
+        private final ChatToolFunction function;
+    }
+    
+    @Data
     private static class ChatToolCall {
         private final String id;
         private final String type;
         @JsonProperty("function")
-        private final ChatToolFunction function;
+        private final ChatToolCallFunction function;
     }
 
     @Data
     private static class ChatToolFunction {
+        private final String name;
+        private final String description;
+        private final Object parameters;
+    }
+    
+    @Data
+    private static class ChatToolCallFunction {
         private final String name;
         private final String arguments;
     }

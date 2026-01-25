@@ -61,6 +61,8 @@ export type ExecutionEventType =
   | "node_completed"
   | "node_failed"
   | "token"
+  | "tool_call"
+  | "reasoning"
 
 function toExecutionStatus(status: string): WorkflowExecution["status"] {
   switch (status) {
@@ -223,6 +225,9 @@ export const executionApi = {
                     // 普通的 ExecutionEvent
                     const eventType = data.type.toLowerCase() as ExecutionEventType
                     onEvent({ ...data, type: eventType })
+                  } else if (currentEventType === "complete") {
+                    // 处理后端明确标记为 complete 的事件，但 data 中没有 type
+                    // 这里可以选择触发一个完成回调，或者什么都不做
                   }
                 } catch (e) {
                   console.error("Failed to parse SSE event:", currentData, e)
@@ -235,7 +240,7 @@ export const executionApi = {
             } else if (line.startsWith("data:")) {
               const data = line.slice(5).trim()
               if (data) {
-                currentData = data
+                currentData = currentData ? currentData + "\n" + data : data
               }
             }
           }

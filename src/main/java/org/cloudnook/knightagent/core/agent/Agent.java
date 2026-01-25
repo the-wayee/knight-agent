@@ -82,9 +82,10 @@ public interface Agent {
      *
      * @param request  Agent 请求
      * @param callback 流式回调
+     * @return Agent 响应
      * @throws AgentExecutionException 执行失败
      */
-    void stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException;
+    AgentResponse stream(AgentRequest request, StreamCallback callback) throws AgentExecutionException;
 
     /**
      * 批量执行 Agent

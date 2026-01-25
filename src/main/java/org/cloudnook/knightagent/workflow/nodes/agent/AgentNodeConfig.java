@@ -18,6 +18,11 @@ public class AgentNodeConfig extends NodeConfig {
     private String model;
 
     /**
+     * Agent 策略 (如: "REACT")
+     */
+    private String strategy;
+
+    /**
      * API Key ID (引用配置的 API Key)
      */
     private String apiKeyId;
@@ -40,7 +45,15 @@ public class AgentNodeConfig extends NodeConfig {
     /**
      * MCP工具引用列表
      */
+    /**
+     * MCP工具引用列表 (旧格式)
+     */
     private List<McpToolRef> mcpTools;
+
+    /**
+     * 工具列表 (新格式: "serverId/toolName")
+     */
+    private List<String> tools;
 
     /**
      * 温度参数

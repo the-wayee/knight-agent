@@ -52,7 +52,7 @@ import java.util.Map;
  * @author KnightAgent
  * @since 1.0.0
  */
-public abstract class AbstractTool implements Tool {
+public abstract class AbstractTool implements McpTool {
 
     /**
      * JSON 序列化器

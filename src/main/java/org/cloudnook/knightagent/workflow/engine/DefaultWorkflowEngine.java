@@ -187,6 +187,7 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
                 .input(nodeInput)
                 .variables(new HashMap<>(context.getNodeOutputs()))
                 .globalConfig(context.getGlobalConfig())
+                .eventConsumer(eventConsumer)
                 .build();
 
         // 执行节点
@@ -236,9 +237,9 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
         return result;
     }
 
-    /**
-     * 创建节点实例
-     */
+    @Autowired(required = false)
+    private org.cloudnook.knightagent.api.service.McpServerService mcpServerService;
+
     @Autowired
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
@@ -260,7 +261,7 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
             }
             case AGENT -> {
                 org.cloudnook.knightagent.workflow.nodes.agent.AgentNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.agent.AgentNodeConfig.class);
-                yield new AgentNode(nodeDef.getId(), nodeDef.getName(), config, agentFactory, apiKeyService);
+                yield new AgentNode(nodeDef.getId(), nodeDef.getName(), config, agentFactory, apiKeyService, mcpServerService);
             }
             case CODE -> {
                 org.cloudnook.knightagent.workflow.nodes.logic.CodeNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.logic.CodeNodeConfig.class);
