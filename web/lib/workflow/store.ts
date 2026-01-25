@@ -1,5 +1,7 @@
 import { create } from "zustand"
-import type { Workflow, WorkflowExecution, WorkflowNode, WorkflowEdge, McpServer, McpTool } from "./types"
+import type { Workflow, WorkflowExecution, WorkflowNode, WorkflowEdge, McpServer, McpTool, ApiKey } from "./types"
+import { apiKeysApi } from "@/lib/api/config/api-keys"
+import { mcpServersApi } from "@/lib/api/config/mcp-servers"
 
 // Demo workflows for showcase
 const demoWorkflows: Workflow[] = [
@@ -69,6 +71,23 @@ const demoWorkflows: Workflow[] = [
     status: "draft",
   },
 ]
+
+// Load API keys and MCP servers from backend
+const loadApiKeys = async (): Promise<ApiKey[]> => {
+  try {
+    return await apiKeysApi.getAll()
+  } catch {
+    return []
+  }
+}
+
+const loadMcpServers = async (): Promise<McpServer[]> => {
+  try {
+    return await mcpServersApi.getAll()
+  } catch {
+    return []
+  }
+}
 
 const demoMcpServers: McpServer[] = [
   {
@@ -147,13 +166,25 @@ interface WorkflowState {
   workflows: Workflow[]
   executions: WorkflowExecution[]
   mcpServers: McpServer[]
+  apiKeys: ApiKey[]
   selectedWorkflow: Workflow | null
   selectedNode: WorkflowNode | null
+
+  // Initialize state (load from backend)
+  initialize: () => Promise<void>
+  refreshConfig: () => Promise<void>
   
   // MCP actions
   getMcpServers: () => McpServer[]
   getMcpTools: () => McpTool[]
-  
+
+  // API Key actions
+  getApiKeys: () => ApiKey[]
+  addApiKey: (key: ApiKey) => void
+  updateApiKey: (id: string, updates: Partial<ApiKey>) => void
+  deleteApiKey: (id: string) => void
+  getApiKeyById: (id: string) => ApiKey | undefined
+
   // Workflow actions
   setWorkflows: (workflows: Workflow[]) => void
   addWorkflow: (workflow: Workflow) => void
@@ -179,21 +210,54 @@ interface WorkflowState {
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   workflows: demoWorkflows,
   executions: demoExecutions,
-  mcpServers: demoMcpServers,
+  mcpServers: [],
+  apiKeys: [],
   selectedWorkflow: null,
   selectedNode: null,
 
+  // Initialize and load config from backend
+  initialize: async () => {
+    const [apiKeys, mcpServers] = await Promise.all([
+      loadApiKeys(),
+      loadMcpServers(),
+    ])
+    set({ apiKeys, mcpServers })
+  },
+
+  refreshConfig: async () => {
+    const [apiKeys, mcpServers] = await Promise.all([
+      loadApiKeys(),
+      loadMcpServers(),
+    ])
+    set({ apiKeys, mcpServers })
+  },
+
   getMcpServers: () => get().mcpServers.filter((s) => s.status === "connected"),
-  
+
   getMcpTools: () => {
     const servers = get().mcpServers.filter((s) => s.status === "connected")
-    return servers.flatMap((server) => 
+    return servers.flatMap((server) =>
       server.tools.map((tool) => ({
         ...tool,
         name: `${server.name}/${tool.name}`,
       }))
     )
   },
+
+  getApiKeys: () => get().apiKeys,
+
+  addApiKey: (key) =>
+    set((state) => ({ apiKeys: [...state.apiKeys, key] })),
+
+  updateApiKey: (id, updates) =>
+    set((state) => ({
+      apiKeys: state.apiKeys.map((k) => (k.id === id ? { ...k, ...updates } : k)),
+    })),
+
+  deleteApiKey: (id) =>
+    set((state) => ({ apiKeys: state.apiKeys.filter((k) => k.id !== id) })),
+
+  getApiKeyById: (id) => get().apiKeys.find((k) => k.id === id),
 
   setWorkflows: (workflows) => set({ workflows }),
   

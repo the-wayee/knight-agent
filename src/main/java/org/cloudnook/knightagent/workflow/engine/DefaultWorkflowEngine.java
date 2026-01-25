@@ -36,6 +36,9 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
     @Autowired(required = false)
     private org.cloudnook.knightagent.core.agent.factory.AgentFactory agentFactory;
 
+    @Autowired(required = false)
+    private org.cloudnook.knightagent.api.service.ApiKeyService apiKeyService;
+
     /**
      * 注册节点
      */
@@ -236,21 +239,53 @@ public class DefaultWorkflowEngine implements WorkflowEngine {
     /**
      * 创建节点实例
      */
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    /**
+     * 创建节点实例
+     */
     private WorkflowNode createNode(NodeDefinition nodeDef) {
         NodeType nodeType = NodeType.fromCode(nodeDef.getType());
+        Map<String, Object> configMap = nodeDef.getConfig();
 
         return switch (nodeType) {
-            case INPUT -> new InputNode(nodeDef.getId(), nodeDef.getName(), null);
-            case OUTPUT -> new OutputNode(nodeDef.getId(), nodeDef.getName(), null);
-            case AGENT -> new AgentNode(nodeDef.getId(), nodeDef.getName(), null, agentFactory);
-            case CODE -> new CodeNode(nodeDef.getId(), nodeDef.getName(), null);
-            case CONDITION -> new ConditionNode(nodeDef.getId(), nodeDef.getName(), null);
-            case HTTP -> new HttpNode(nodeDef.getId(), nodeDef.getName(), null);
+            case INPUT -> {
+                 org.cloudnook.knightagent.workflow.nodes.io.InputNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.io.InputNodeConfig.class);
+                 yield new InputNode(nodeDef.getId(), nodeDef.getName(), config);
+            }
+            case OUTPUT -> {
+                org.cloudnook.knightagent.workflow.nodes.io.OutputNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.io.OutputNodeConfig.class);
+                yield new OutputNode(nodeDef.getId(), nodeDef.getName(), config);
+            }
+            case AGENT -> {
+                org.cloudnook.knightagent.workflow.nodes.agent.AgentNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.agent.AgentNodeConfig.class);
+                yield new AgentNode(nodeDef.getId(), nodeDef.getName(), config, agentFactory, apiKeyService);
+            }
+            case CODE -> {
+                org.cloudnook.knightagent.workflow.nodes.logic.CodeNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.logic.CodeNodeConfig.class);
+                yield new CodeNode(nodeDef.getId(), nodeDef.getName(), config);
+            }
+            case CONDITION -> {
+                org.cloudnook.knightagent.workflow.nodes.logic.ConditionNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.logic.ConditionNodeConfig.class);
+                yield new ConditionNode(nodeDef.getId(), nodeDef.getName(), config);
+            }
+            case HTTP -> {
+                org.cloudnook.knightagent.workflow.nodes.external.HttpNodeConfig config = convertConfig(configMap, org.cloudnook.knightagent.workflow.nodes.external.HttpNodeConfig.class);
+                yield new HttpNode(nodeDef.getId(), nodeDef.getName(), config);
+            }
             case TOOL -> {
                 log.warn("Tool node not yet implemented, using passthrough");
                 yield new InputNode(nodeDef.getId(), nodeDef.getName(), null);
             }
         };
+    }
+
+    private <T> T convertConfig(Map<String, Object> configMap, Class<T> targetType) {
+        if (configMap == null) {
+            return null;
+        }
+        return objectMapper.convertValue(configMap, targetType);
     }
 
     /**

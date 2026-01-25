@@ -70,3 +70,14 @@ export interface McpTool {
   description: string
   inputSchema: Record<string, unknown>
 }
+
+export interface ApiKey {
+  id: string
+  provider: string
+  name: string
+  key: string
+  baseUrl?: string
+  modelId?: string
+  status: "valid" | "invalid" | "unknown"
+  lastUsed?: string
+}

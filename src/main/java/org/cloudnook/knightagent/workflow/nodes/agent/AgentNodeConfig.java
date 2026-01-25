@@ -18,6 +18,21 @@ public class AgentNodeConfig extends NodeConfig {
     private String model;
 
     /**
+     * API Key ID (引用配置的 API Key)
+     */
+    private String apiKeyId;
+
+    /**
+     * API Base URL (用于自定义 API 端点，如 OpenAI 代理)
+     */
+    private String baseUrl;
+
+    /**
+     * API Key (兼容旧配置，直接存储的密钥)
+     */
+    private String apiKey;
+
+    /**
      * 系统提示词
      */
     private String systemPrompt;

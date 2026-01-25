@@ -6,7 +6,10 @@ import org.cloudnook.knightagent.core.agent.AgentConfig;
 import org.cloudnook.knightagent.core.agent.AgentRequest;
 import org.cloudnook.knightagent.core.agent.AgentResponse;
 import org.cloudnook.knightagent.core.agent.factory.AgentFactory;
+import org.cloudnook.knightagent.api.service.ApiKeyService;
+import org.cloudnook.knightagent.api.entity.ApiKey;
 import org.cloudnook.knightagent.core.model.ChatModel;
+import org.cloudnook.knightagent.core.model.OpenAIChatModel;
 import org.cloudnook.knightagent.workflow.node.AbstractNode;
 import org.cloudnook.knightagent.workflow.node.NodeContext;
 import org.cloudnook.knightagent.workflow.node.NodeExecutionResult;
@@ -23,17 +26,27 @@ import java.util.Map;
 public class AgentNode extends AbstractNode<AgentNodeConfig> {
 
     private final AgentFactory agentFactory;
+    private final ApiKeyService apiKeyService;
     private final Map<String, ChatModel> modelRegistry;
 
     public AgentNode(AgentFactory agentFactory) {
         super(null, null, null);
         this.agentFactory = agentFactory;
+        this.apiKeyService = null;
         this.modelRegistry = new HashMap<>();
     }
 
     public AgentNode(String id, String name, AgentNodeConfig config, AgentFactory agentFactory) {
         super(id, name, config);
         this.agentFactory = agentFactory;
+        this.apiKeyService = null;
+        this.modelRegistry = new HashMap<>();
+    }
+
+    public AgentNode(String id, String name, AgentNodeConfig config, AgentFactory agentFactory, ApiKeyService apiKeyService) {
+        super(id, name, config);
+        this.agentFactory = agentFactory;
+        this.apiKeyService = apiKeyService;
         this.modelRegistry = new HashMap<>();
     }
 
@@ -54,12 +67,8 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
         AgentNodeConfig config = getConfig();
 
         try {
-            // 获取模型
-            ChatModel model = modelRegistry.get(config.getModel());
-            if (model == null) {
-                return NodeExecutionResult.failure(context.getNodeId(),
-                        "Model not found: " + config.getModel());
-            }
+            // 获取或创建模型
+            ChatModel model = getOrCreateModel(config);
 
             // 构建Agent配置
             AgentConfig.Builder agentConfigBuilder = AgentConfig.builder();
@@ -104,6 +113,56 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
             log.error("Agent node execution failed", e);
             return NodeExecutionResult.failure(context.getNodeId(), e.getMessage());
         }
+    }
+
+    /**
+     * 获取或创建模型实例
+     */
+    private ChatModel getOrCreateModel(AgentNodeConfig config) {
+        // config 可能为 null，需要检查
+        if (config == null) {
+            throw new IllegalArgumentException("Agent node config is required. Please configure the node with an API Key.");
+        }
+
+        // 优先使用 apiKeyId 从数据库获取配置
+        if (config.getApiKeyId() != null && !config.getApiKeyId().isEmpty() && apiKeyService != null) {
+            ApiKey apiKeyEntity = apiKeyService.getEntityByUuid(config.getApiKeyId());
+            if (apiKeyEntity != null) {
+                OpenAIChatModel.Builder builder = OpenAIChatModel.builder()
+                        .apiKey(apiKeyEntity.getApiKey())
+                        .modelId(config.getModel() != null ? config.getModel() : apiKeyEntity.getModelId());
+
+                if (apiKeyEntity.getBaseUrl() != null && !apiKeyEntity.getBaseUrl().isEmpty()) {
+                    builder.baseUrl(apiKeyEntity.getBaseUrl());
+                }
+
+                return builder.build();
+            }
+            throw new IllegalArgumentException("API Key not found: " + config.getApiKeyId());
+        }
+
+        // 兼容旧配置：如果配置了直接的 API 信息
+        if (config.getApiKey() != null && !config.getApiKey().isEmpty()) {
+            OpenAIChatModel.Builder builder = OpenAIChatModel.builder()
+                    .apiKey(config.getApiKey())
+                    .modelId(config.getModel() != null ? config.getModel() : "gpt-3.5-turbo");
+
+            if (config.getBaseUrl() != null && !config.getBaseUrl().isEmpty()) {
+                builder.baseUrl(config.getBaseUrl());
+            }
+
+            return builder.build();
+        }
+
+        // 否则从注册表中获取模型
+        ChatModel model = modelRegistry.get(config.getModel());
+        if (model == null) {
+            throw new IllegalArgumentException(
+                "Model not found: " + config.getModel() + ". " +
+                "Please configure apiKey in the node settings."
+            );
+        }
+        return model;
     }
 
     /**

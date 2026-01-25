@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { WorkflowNode } from "@/lib/workflow/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +21,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { X, ChevronDown, Sparkles, Variable, Plus, Trash2, Wrench, Server, Check } from "lucide-react"
+import { X, ChevronDown, Sparkles, Variable, Plus, Trash2, Wrench, Server, Check, Key } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useWorkflowStore } from "@/lib/workflow/store"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -44,6 +44,12 @@ const models = [
 export function ConfigPanel({ node, onClose, onUpdate }: ConfigPanelProps) {
   const [basicOpen, setBasicOpen] = useState(true)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const { initialize } = useWorkflowStore()
+
+  // 初始化配置数据（API Keys 和 MCP Servers）
+  useEffect(() => {
+    initialize()
+  }, [initialize])
 
   if (!node) {
     return (
@@ -159,9 +165,10 @@ interface ConfigSectionProps {
 
 function AgentConfig({ data, onUpdate, basicOpen, setBasicOpen, advancedOpen, setAdvancedOpen }: ConfigSectionProps) {
   const [toolsOpen, setToolsOpen] = useState(false)
-  const { mcpServers } = useWorkflowStore()
+  const { mcpServers, apiKeys } = useWorkflowStore()
   const connectedServers = mcpServers.filter((s) => s.status === "connected")
   const selectedTools = (data.tools as string[]) || []
+  const selectedApiKeyId = (data.apiKeyId as string) || ""
 
   const toggleTool = (toolName: string) => {
     if (selectedTools.includes(toolName)) {
@@ -180,22 +187,60 @@ function AgentConfig({ data, onUpdate, basicOpen, setBasicOpen, advancedOpen, se
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label>Model</Label>
+            <div className="flex items-center justify-between">
+              <Label>API Configuration</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => window.open("/settings/api-keys", "_blank")}
+              >
+                <Key className="h-3 w-3 mr-1" />
+                Manage Keys
+              </Button>
+            </div>
             <Select
-              value={(data.model as string) || "gpt-4o"}
-              onValueChange={(value) => onUpdate({ model: value })}
+              value={selectedApiKeyId}
+              onValueChange={(value) => {
+                const selectedKey = apiKeys.find((k) => k.id === value)
+                if (selectedKey) {
+                  onUpdate({
+                    apiKeyId: value,
+                    model: selectedKey.modelId || "gpt-3.5-turbo",
+                  })
+                }
+              }}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select API Key" />
               </SelectTrigger>
               <SelectContent>
-                {models.map((model) => (
-                  <SelectItem key={model.value} value={model.value}>
-                    {model.label}
-                  </SelectItem>
-                ))}
+                {apiKeys.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground text-center">
+                    No API keys configured
+                  </div>
+                ) : (
+                  apiKeys.map((key) => (
+                    <SelectItem key={key.id} value={key.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{key.provider}</span>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground">{key.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {selectedApiKeyId && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="secondary" className="text-xs">
+                  {apiKeys.find((k) => k.id === selectedApiKeyId)?.provider}
+                </Badge>
+                <span>Model:</span>
+                <span className="font-mono">{data.model as string}</span>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
