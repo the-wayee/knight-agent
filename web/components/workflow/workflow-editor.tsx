@@ -147,11 +147,21 @@ export function WorkflowEditor({ id }: WorkflowEditorProps) {
       }
 
       const newNodeId = `${type}-${Date.now()}`
+
+      const initialData: Record<string, unknown> = {
+        label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node`
+      }
+
+      if (type === "agent") {
+        initialData.strategy = "REACT"
+        initialData.model = "gpt-3.5-turbo"
+      }
+
       const newNode: Node = {
         id: newNodeId,
         type,
         position,
-        data: { label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node` },
+        data: initialData,
       }
 
       setNodes((nds) => nds.concat(newNode))
@@ -167,11 +177,21 @@ export function WorkflowEditor({ id }: WorkflowEditorProps) {
       }
 
       const newNodeId = `${type}-${Date.now()}`
+
+      const initialData: Record<string, unknown> = {
+        label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node`
+      }
+
+      if (type === "agent") {
+        initialData.strategy = "REACT"
+        initialData.model = "gpt-3.5-turbo"
+      }
+
       const newNode: Node = {
         id: newNodeId,
         type,
         position,
-        data: { label: `${type.charAt(0).toUpperCase() + type.slice(1)} Node` },
+        data: initialData,
       }
 
       setNodes((nds) => nds.concat(newNode))
@@ -184,13 +204,19 @@ export function WorkflowEditor({ id }: WorkflowEditorProps) {
 
     setIsSaving(true)
     try {
-      const updatedNodes: WorkflowNode[] = nodes.map((node) => ({
-        id: node.id,
-        type: node.type as NodeType,
-        name: node.data.label || node.type,
-        position: node.position,
-        data: node.data,
-      }))
+      const updatedNodes: WorkflowNode[] = nodes.map((node) => {
+        const data = { ...node.data } as Record<string, unknown>
+        if (node.type === "agent" && !data.strategy) {
+          data.strategy = "REACT"
+        }
+        return {
+          id: node.id,
+          type: node.type as NodeType,
+          name: (node.data.label as string) || node.type,
+          position: node.position,
+          data,
+        }
+      })
 
       const updatedEdges: WorkflowEdge[] = edges.map((edge) => ({
         id: edge.id,
@@ -512,9 +538,9 @@ export function WorkflowEditor({ id }: WorkflowEditorProps) {
                   nds.map((n) =>
                     n.id === currentNode.id
                       ? {
-                          ...n,
-                          data: { ...n.data, ...updates },
-                        }
+                        ...n,
+                        data: { ...n.data, ...updates },
+                      }
                       : n
                   )
                 )

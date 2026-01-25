@@ -233,7 +233,14 @@
 
 ---
 
-## 最近更新 (2026-01-25)
+### 最近更新 (2026-01-25)
+
+#### 修复与重构 (Refactoring & Fixes)
+- ✅ **Tool 概念统一**：将 `Tool` 接口重命名为 `McpTool`，统一 Core 和 MCP 层的工具抽象，消除歧义。
+- ✅ **OpenAI 兼容性修复**：修复 `OpenAIChatModel` 中 `tool_call_id` 缺失导致的 400 错误。
+- ✅ **前端配置适配**：修复 `AgentNode` 无法识别前端扁平化 `tools` ("serverId/toolName") 配置的问题。
+- ✅ **运行时修复**：修复 `ExecutionEventType` 缺失 `TOOL_CALL` 枚举值导致的异常。
+- ✅ **构建修复**：消除 Lombok `@Builder` 命名冲突和所有编译错误。
 
 ### 已完成的重构
 - ✅ 修复 `AgentState.fromBytes()` 消息反序列化
@@ -375,63 +382,63 @@ knight-agent/
 
 ### 开发阶段
 
-#### 阶段 W1：工作流引擎核心
-- [ ] **节点抽象层**
-  - [ ] `WorkflowNode` 接口
-  - [ ] `NodeConfig` 配置类
-  - [ ] `NodeContext` 执行上下文
-  - [ ] `NodeType` 类型枚举
+#### 阶段 W1：工作流引擎核心 (已完成 ✅)
+- [x] **节点抽象层**
+  - [x] `WorkflowNode` 接口
+  - [x] `NodeConfig` 配置类
+  - [x] `NodeContext` 执行上下文
+  - [x] `NodeType` 类型枚举
 
-- [ ] **工作流定义**
-  - [ ] `WorkflowDefinition` DSL
-  - [ ] `WorkflowEdge` 连接定义
-  - [ ] `WorkflowParser` JSON 解析器
-  - [ ] 节点依赖拓扑排序
+- [x] **工作流定义**
+  - [x] `WorkflowDefinition` DSL
+  - [x] `WorkflowEdge` 连接定义
+  - [x] `WorkflowParser` JSON 解析器
+  - [x] 节点依赖拓扑排序
 
-- [ ] **执行引擎**
-  - [ ] `WorkflowEngine` 执行器
-  - [ ] `ExecutionResult` 结果封装
-  - [ ] 同步执行模式
-  - [ ] 错误处理和回滚
+- [x] **执行引擎**
+  - [x] `WorkflowEngine` 执行器
+  - [x] `ExecutionResult` 结果封装
+  - [x] 同步执行模式
+  - [x] 错误处理和回滚
 
-#### 阶段 W2：内置节点实现
-- [ ] **基础节点**
-  - [ ] `InputNode` - 输入节点
-  - [ ] `OutputNode` - 输出节点
-  - [ ] `CodeNode` - JavaScript 代码执行
-  - [ ] `ConditionNode` - 条件分支
+#### 阶段 W2：内置节点实现 (已完成 ✅)
+- [x] **基础节点**
+  - [x] `InputNode` - 输入节点
+  - [x] `OutputNode` - 输出节点
+  - [x] `CodeNode` - JavaScript 代码执行
+  - [x] `ConditionNode` - 条件分支
 
-- [ ] **Agent 节点**
-  - [ ] `AgentNode` - 集成 Agent 框架
-  - [ ] 支持提示词配置
-  - [ ] 支持 MCP 工具选择
-  - [ ] 支持模型参数配置
+- [x] **Agent 节点**
+  - [x] `AgentNode` - 集成 Agent 框架
+  - [x] 支持提示词配置
+  - [x] 支持 MCP 工具选择
+  - [x] 支持模型参数配置
 
-- [ ] **工具节点**
-  - [ ] `ToolNode` - 单独工具调用
-  - [ ] `HttpNode` - HTTP 请求
+- [x] **工具节点**
+  - [x] `ToolNode` - 单独工具调用
+  - [x] `HttpNode` - HTTP 请求
 
-#### 阶段 W3：后端 API
-- [ ] **工作流 CRUD**
-  - [ ] `WorkflowController`
-  - [ ] `WorkflowService`
-  - [ ] `WorkflowRepository`（PostgreSQL）
-  - [ ] 版本管理
+#### 阶段 W3：后端 API (后端部分已完成 ✅)
+- [x] **工作流 CRUD**
+  - [x] `WorkflowController`
+  - [x] `WorkflowService`
+  - [x] `WorkflowRepository`（Postgres/JPA）
+  - [x] 版本管理
 
-- [ ] **执行 API**
-  - [ ] `ExecutionController`
-  - [ ] 同步执行接口
-  - [ ] 执行历史查询
+- [x] **执行 API**
+  - [x] `ExecutionController`
+  - [x] 同步执行接口
+  - [x] 执行历史查询
 
-- [ ] **WebSocket 支持**
-  - [ ] `WebSocketController`
-  - [ ] 流式推送执行状态
-  - [ ] 节点进度通知
+- [x] **WebSocket 支持**
+  - [x] `WebSocketController`
+  - [x] 流式推送执行状态
+  - [x] 节点进度通知
 
-- [ ] **MCP 集成**
-  - [ ] MCP 服务器管理
-  - [ ] 工具列表查询
-  - [ ] 工具动态加载
+- [x] **MCP 集成**
+  - [x] MCP 服务器管理 (`McpServerService`)
+  - [x] 工具列表查询
+  - [x] 工具动态加载
 
 #### 阶段 W4：前端开发（v0.dev）
 - [ ] **基础框架**

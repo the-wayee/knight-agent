@@ -32,11 +32,11 @@ import { apiKeysApi, type CreateApiKeyRequest } from "@/lib/api/config/api-keys"
 import type { ApiKey } from "@/lib/workflow/types"
 
 const providers = [
-  { value: "openai", label: "OpenAI", baseUrl: "https://api.openai.com/v1", modelId: "gpt-4o" },
-  { value: "anthropic", label: "Anthropic", baseUrl: "https://api.anthropic.com/v1", modelId: "claude-3-5-sonnet-20241022" },
-  { value: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", modelId: "deepseek-chat" },
-  { value: "groq", label: "Groq", baseUrl: "https://api.groq.com/openai/v1", modelId: "llama-3.3-70b-versatile" },
-  { value: "azure", label: "Azure OpenAI", baseUrl: "", modelId: "" },
+  { value: "openai", label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
+  { value: "anthropic", label: "Anthropic", baseUrl: "https://api.anthropic.com/v1" },
+  { value: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1" },
+  { value: "groq", label: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
+  { value: "azure", label: "Azure OpenAI", baseUrl: "" },
 ]
 
 export default function ApiKeysPage() {
@@ -45,7 +45,8 @@ export default function ApiKeysPage() {
   const [saving, setSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [showKey, setShowKey] = useState<string | null>(null)
-  const [newKey, setNewKey] = useState({ provider: "", name: "", key: "", baseUrl: "", modelId: "" })
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null)
+  const [newKey, setNewKey] = useState({ provider: "", name: "", key: "", baseUrl: "" })
   const [error, setError] = useState<string | null>(null)
 
   // 加载 API Keys
@@ -67,8 +68,8 @@ export default function ApiKeysPage() {
     }
   }
 
-  const handleAddKey = async () => {
-    if (!newKey.provider || !newKey.key) {
+  const handleSaveKey = async () => {
+    if (!newKey.provider || (!newKey.key && !editingKeyId)) {
       setError("Provider and API Key are required")
       return
     }
@@ -77,24 +78,45 @@ export default function ApiKeysPage() {
     setError(null)
 
     try {
-      const request: CreateApiKeyRequest = {
-        provider: newKey.provider,
-        name: newKey.name || undefined,
-        apiKey: newKey.key,
-        baseUrl: newKey.baseUrl || undefined,
-        modelId: newKey.modelId || undefined,
+      if (editingKeyId) {
+        // Update existing key
+        await apiKeysApi.update(editingKeyId, {
+          name: newKey.name || undefined,
+          apiKey: newKey.key || undefined,
+          baseUrl: newKey.baseUrl || undefined,
+        })
+      } else {
+        // Create new key
+        const request: CreateApiKeyRequest = {
+          provider: newKey.provider,
+          name: newKey.name || undefined,
+          apiKey: newKey.key,
+          baseUrl: newKey.baseUrl || undefined,
+        }
+        await apiKeysApi.create(request)
       }
 
-      await apiKeysApi.create(request)
-      setNewKey({ provider: "", name: "", key: "", baseUrl: "", modelId: "" })
+      setNewKey({ provider: "", name: "", key: "", baseUrl: "" })
+      setEditingKeyId(null)
       setDialogOpen(false)
       await loadKeys()
     } catch (err) {
-      setError("Failed to create API key")
+      setError("Failed to save API key")
       console.error(err)
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleEditKey = (key: ApiKey) => {
+    setEditingKeyId(key.id)
+    setNewKey({
+      provider: key.provider,
+      name: key.name,
+      key: "", // Don't show existing key for security, require new one only if changing
+      baseUrl: key.baseUrl || "",
+    })
+    setDialogOpen(true)
   }
 
   const handleDeleteKey = async (id: string) => {
@@ -118,7 +140,6 @@ export default function ApiKeysPage() {
       ...newKey,
       provider: value,
       baseUrl: providerConfig?.baseUrl || "",
-      modelId: providerConfig?.modelId || "",
     })
   }
 
@@ -147,16 +168,19 @@ export default function ApiKeysPage() {
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={() => {
+                setEditingKeyId(null)
+                setNewKey({ provider: "", name: "", key: "", baseUrl: "" })
+              }}>
                 <Key className="h-4 w-4 mr-2" />
                 Add API Key
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add API Key</DialogTitle>
+                <DialogTitle>{editingKeyId ? "Edit API Key" : "Add API Key"}</DialogTitle>
                 <DialogDescription>
-                  Add an API key for an LLM provider to use in your workflows.
+                  {editingKeyId ? "Update existing API key configuration." : "Add an API key for an LLM provider to use in your workflows."}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -172,6 +196,7 @@ export default function ApiKeysPage() {
                     className="w-full h-10 px-3 rounded-md border border-input bg-background"
                     value={newKey.provider}
                     onChange={(e) => handleProviderChange(e.target.value)}
+                    disabled={!!editingKeyId}
                   >
                     <option value="">Select provider...</option>
                     {providers.map((p) => (
@@ -195,7 +220,7 @@ export default function ApiKeysPage() {
                   <Input
                     id="api-key"
                     type="password"
-                    placeholder="sk-..."
+                    placeholder={editingKeyId ? "Leave empty to keep current key" : "sk-..."}
                     value={newKey.key}
                     onChange={(e) => setNewKey({ ...newKey, key: e.target.value })}
                   />
@@ -215,26 +240,14 @@ export default function ApiKeysPage() {
                     Custom API endpoint. Leave empty to use provider default.
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="model-id">Default Model ID (optional)</Label>
-                  <Input
-                    id="model-id"
-                    placeholder="gpt-4o"
-                    value={newKey.modelId}
-                    onChange={(e) => setNewKey({ ...newKey, modelId: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Default model to use with this API key.
-                  </p>
-                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleAddKey} disabled={saving}>
+                <Button onClick={handleSaveKey} disabled={saving}>
                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Add Key
+                  {editingKeyId ? "Update Key" : "Add Key"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -283,7 +296,12 @@ export default function ApiKeysPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleEditKey(apiKey)}
+                        >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
@@ -318,12 +336,7 @@ export default function ApiKeysPage() {
                             <span className="font-mono">{apiKey.baseUrl}</span>
                           </div>
                         )}
-                        {apiKey.modelId && (
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium">Model:</span>
-                            <span className="font-mono">{apiKey.modelId}</span>
-                          </div>
-                        )}
+
                       </div>
                     </div>
                   </CardContent>

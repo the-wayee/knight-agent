@@ -9,6 +9,7 @@ interface AgentNodeData extends BaseNodeData {
   model?: string
   temperature?: number
   tools?: string[]
+  strategy?: string
 }
 
 export const AgentNode = memo(function AgentNode(props: NodeProps) {

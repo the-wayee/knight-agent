@@ -130,7 +130,7 @@ export function ConfigPanel({ node, onClose, onUpdate }: ConfigPanelProps) {
         <Button variant="outline" className="flex-1 bg-transparent" onClick={onClose}>
           Cancel
         </Button>
-        <Button className="flex-1">Apply</Button>
+        <Button className="flex-1" onClick={onClose}>Apply</Button>
       </div>
     </div>
   )
@@ -146,7 +146,7 @@ function NodeTypeIcon({ type }: { type: string }) {
     http: "bg-blue-100 text-blue-600",
     tool: "bg-orange-100 text-orange-600",
   }
-  
+
   return (
     <div className={cn("h-6 w-6 rounded flex items-center justify-center text-xs font-medium", colors[type] || "bg-muted")}>
       {type.charAt(0).toUpperCase()}
@@ -202,13 +202,7 @@ function AgentConfig({ data, onUpdate, basicOpen, setBasicOpen, advancedOpen, se
             <Select
               value={selectedApiKeyId}
               onValueChange={(value) => {
-                const selectedKey = apiKeys.find((k) => k.id === value)
-                if (selectedKey) {
-                  onUpdate({
-                    apiKeyId: value,
-                    model: selectedKey.modelId || "gpt-3.5-turbo",
-                  })
-                }
+                onUpdate({ apiKeyId: value })
               }}
             >
               <SelectTrigger>
@@ -232,15 +226,30 @@ function AgentConfig({ data, onUpdate, basicOpen, setBasicOpen, advancedOpen, se
                 )}
               </SelectContent>
             </Select>
-            {selectedApiKeyId && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary" className="text-xs">
-                  {apiKeys.find((k) => k.id === selectedApiKeyId)?.provider}
-                </Badge>
-                <span>Model:</span>
-                <span className="font-mono">{data.model as string}</span>
-              </div>
-            )}
+
+            <div className="space-y-2">
+              <Label>Model Name</Label>
+              <Input
+                value={(data.model as string) || ""}
+                onChange={(e) => onUpdate({ model: e.target.value })}
+                placeholder="e.g. gpt-4, claude-3-opus"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Agent Strategy</Label>
+            <Select
+              value={(data.strategy as string) || "REACT"}
+              onValueChange={(value) => onUpdate({ strategy: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="REACT">ReAct Agent</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -367,7 +376,7 @@ function AgentConfig({ data, onUpdate, basicOpen, setBasicOpen, advancedOpen, se
               </div>
             ))
           )}
-          
+
           {selectedTools.length > 0 && (
             <div className="pt-2 border-t">
               <div className="flex items-center justify-between mb-2">
