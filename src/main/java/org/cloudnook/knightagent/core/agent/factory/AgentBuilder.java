@@ -12,6 +12,8 @@ import org.cloudnook.knightagent.core.checkpoint.InMemorySaver;
 import org.cloudnook.knightagent.core.middleware.Middleware;
 import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
 import org.cloudnook.knightagent.core.model.ChatModel;
+import org.cloudnook.knightagent.core.mcp.McpConfig;
+import org.cloudnook.knightagent.core.mcp.McpToolRegistryWrapper;
 import org.cloudnook.knightagent.core.tool.Tool;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 import org.slf4j.Logger;
@@ -19,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Agent 构建器
@@ -66,6 +69,10 @@ public class AgentBuilder {
     @Getter
     @Setter
     private org.cloudnook.knightagent.core.agent.strategy.ExecutionStrategy strategy;
+
+    @Getter
+    @Setter
+    private List<McpConfig> mcpConfigs;
 
     /**
      * 设置 LLM 模型
@@ -162,6 +169,53 @@ public class AgentBuilder {
     }
 
     /**
+     * 添加 MCP 配置
+     * <p>
+     * 从 MCP 服务器自动发现并注册工具。
+     * <p>
+     * 使用示例：
+     * <pre>{@code
+     * // STDIO 协议（本地 npx 包）
+     * .mcp(McpConfig.builder()
+     *     .protocol(McpProtocol.STDIO)
+     *     .entrypoint("npx -y @modelcontextprotocol/server-filesystem /path/to/files")
+     *     .build())
+     *
+     * // SSE 协议（HTTP 服务器）
+     * .mcp(McpConfig.builder()
+     *     .protocol(McpProtocol.SSE)
+     *     .entrypoint("http://localhost:3000/sse")
+     *     .build())
+     * }</pre>
+     *
+     * @param mcpConfig MCP 配置
+     * @return this
+     */
+    public AgentBuilder mcp(McpConfig mcpConfig) {
+        if (this.mcpConfigs == null) {
+            this.mcpConfigs = new ArrayList<>();
+        }
+        this.mcpConfigs.add(mcpConfig);
+        return this;
+    }
+
+    /**
+     * 添加多个 MCP 配置
+     *
+     * @param mcpConfigs MCP 配置列表
+     * @return this
+     */
+    public AgentBuilder mcpAll(List<McpConfig> mcpConfigs) {
+        if (this.mcpConfigs == null) {
+            this.mcpConfigs = new ArrayList<>();
+        }
+        if (mcpConfigs != null) {
+            this.mcpConfigs.addAll(mcpConfigs);
+        }
+        return this;
+    }
+
+    /**
      * 构建 Agent 实例
      *
      * @return Agent 实例
@@ -181,9 +235,35 @@ public class AgentBuilder {
 
         // 构建工具执行器
         ToolInvoker toolInvoker = new ToolInvoker();
+
+        // 注册手动添加的工具
         if (tools != null) {
             toolInvoker.registerAll(tools);
             log.debug("注册了 {} 个工具", tools.size());
+        }
+
+        // 处理 MCP 配置
+        List<McpToolRegistryWrapper> mcpRegistries = new ArrayList<>();
+        if (mcpConfigs != null && !mcpConfigs.isEmpty()) {
+            log.info("处理 {} 个 MCP 配置", mcpConfigs.size());
+
+            for (McpConfig mcpConfig : mcpConfigs) {
+                try {
+                    McpToolRegistryWrapper registry = new McpToolRegistryWrapper(mcpConfig);
+                    registry.initialize();
+
+                    List<Tool> mcpTools = registry.getRegisteredTools();
+                    toolInvoker.registerAll(mcpTools);
+
+                    mcpRegistries.add(registry);
+                    log.info("MCP 服务器已连接: {}, 注册了 {} 个工具",
+                            mcpConfig.getProtocol(), mcpTools.size());
+
+                } catch (Exception e) {
+                    log.error("MCP 配置初始化失败: {}", mcpConfig.getEntrypoint(), e);
+                    // 继续处理其他配置，不中断构建流程
+                }
+            }
         }
 
         // 构建中间件链
@@ -204,6 +284,7 @@ public class AgentBuilder {
                 .checkpointer(finalCheckpointer)
                 .config(finalConfig)
                 .middlewareChain(middlewareChain)
+                .attributes(Map.of("mcpRegistries", mcpRegistries))
                 .build();
 
         // 创建并返回 Agent

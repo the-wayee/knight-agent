@@ -8,6 +8,10 @@ import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
 /**
  * Agent 执行上下文
  * <p>
@@ -45,6 +49,29 @@ public class ExecutionContext {
      * 中间件链
      */
     private final MiddlewareChain middlewareChain;
+
+    /**
+     * 附加属性
+     * <p>
+     * 用于存储执行过程中的动态数据。
+     */
+    @Builder.Default
+    private final Map<String, Object> attributes = new HashMap<>();
+
+    /**
+     * 获取附加属性值
+     *
+     * @param key 属性键
+     * @return 属性值的 Optional 包装
+     */
+    @SuppressWarnings("unchecked")
+    public <T> Optional<T> getAttribute(String key) {
+        if (attributes == null) {
+            return Optional.empty();
+        }
+        Object value = attributes.get(key);
+        return Optional.ofNullable((T) value);
+    }
 
     /**
      * 创建默认上下文

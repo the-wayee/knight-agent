@@ -248,6 +248,7 @@
 - ✅ **完成阶段四：中间件系统（4 个内置中间件）**
 - ✅ **完成 Multi-Agent System（多 Agent 协作）**
 - ✅ **完成真实 API 集成测试（Multi-Agent）**
+- ✅ **完成 MCP (Model Context Protocol) 支持**
 
 ### 新增文件
 - `core/agent/strategy/` - 执行策略（3 个文件）
@@ -265,14 +266,26 @@
   - `HandoffStrategy` - 策略接口
   - `SupervisorStrategy` - LLM 路由策略
   - `MultiAgentSystem` - 多 Agent 协调器
+- `core/mcp/` - MCP 协议支持（10 个文件）：
+  - `McpProtocol` - MCP 协议类型枚举（STDIO, SSE, WS）
+  - `McpConfig` - MCP 配置类（支持 Builder）
+  - `McpException` - MCP 异常类
+  - `McpClient` - MCP 客户端（实现 JSON-RPC 通信）
+  - `McpToolDescription` - MCP 工具描述
+  - `McpToolResult` - MCP 工具执行结果
+  - `McpResourceDescription` - MCP 资源描述
+  - `McpPromptDescription` - MCP 提示词描述
+  - `McpTool` - MCP 工具适配器（实现 Tool 接口）
+  - `McpToolRegistry` - MCP 工具注册器（自动发现和注册）
 - `test/core/agent/` - 测试类（3 个文件）：
   - `AgentIntegrationTest` - Mock 模型集成测试（18 个测试用例）
   - `OpenAIIntegrationTest` - 真实 API 集成测试
   - `MockWeatherTool` - 测试用工具
-- `test/examples/` - 示例类（3 个文件）：
+- `test/examples/` - 示例类（4 个文件）：
   - `StateInjectionExample` - 状态注入中间件示例（8 个示例）
   - `MultiAgentExample` - 多 Agent 系统示例（5 个示例）
   - `OpenAIMultiAgentTest` - Multi-Agent 真实 API 测试（7 个测试用例）
+  - `McpExample` - MCP 使用示例（5 个示例）
 
 ### Multi-Agent 系统测试结果
 
@@ -284,9 +297,48 @@
 
 ### 下一步计划
 1. **运行真实 API 测试** - 验证与 OpenAI 的集成
-2. **阶段六** - 实现存储和优化功能
-3. **阶段七** - Spring Boot 自动配置和示例
-4. **阶段八** - 高级功能（可选）
+2. **MCP 真实服务器测试** - 测试与实际 MCP 服务器的集成 ✅
+3. **阶段六** - 实现存储和优化功能
+4. **阶段七** - Spring Boot 自动配置和示例
+5. **阶段八** - 高级功能（可选）
+
+### MCP 测试结果
+
+使用 FastMCP Demo 服务器测试（localhost:8000/mcp）：
+
+| 测试用例 | 耗时 | 结果 |
+|---------|------|------|
+| MCP 工具发现 | - | ✅ 成功 |
+| Agent + MCP 加法 | 532ms | ✅ 412 |
+| 多次计算 | 814ms | ✅ 300, 1850, 110 |
+| 复杂任务计算 | - | ✅ 成功 |
+| 错误处理 | - | ✅ 成功 |
+
+### MCP 支持说明
+
+**MCP (Model Context Protocol)** 是一个开放协议，允许 AI 应用连接到外部数据源和工具。
+
+**支持的协议类型：**
+- **STDIO** - 通过标准输入输出通信（适用于本地 npx 包）
+- **SSE** - 通过 Server-Sent Events 通信（HTTP 服务器）
+- **WS** - 通过 WebSocket 通信（实时双向交互）
+
+**使用方式：**
+```java
+Agent agent = new DefaultAgentFactory().createAgent()
+    .model(chatModel)
+    .mcp(McpConfig.builder()
+        .protocol(McpProtocol.STDIO)
+        .entrypoint("npx -y @modelcontextprotocol/server-filesystem /path/to/files")
+        .build())
+    .build();
+```
+
+**官方 MCP 服务器示例：**
+- `@modelcontextprotocol/server-filesystem` - 文件系统访问
+- `@modelcontextprotocol/server-postgres` - PostgreSQL 数据库
+- `@modelcontextprotocol/server-github` - GitHub 集成
+- `@modelcontextprotocol/server-brave-search` - Brave 搜索
 
 ---
 
