@@ -11,7 +11,8 @@ import org.cloudnook.knightagent.core.middleware.builtin.LoggingMiddleware;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.model.OpenAIChatModel;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
-import org.cloudnook.knightagent.core.tool.Tool;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
+import org.cloudnook.knightagent.core.tool.AbstractTool;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.condition.EnabledIf;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -198,7 +200,7 @@ class OpenAIIntegrationTest {
         @DisplayName("单次工具调用")
         void testSingleToolCall() throws AgentExecutionException {
             // 创建一个简单的计算器工具
-            Tool calculatorTool = new CalculatorTool();
+            AbstractTool calculatorTool = new CalculatorTool();
 
             Agent agent = new DefaultAgentFactory().createAgent()
                     .model(chatModel)
@@ -222,8 +224,8 @@ class OpenAIIntegrationTest {
         @Test
         @DisplayName("多个工具调用")
         void testMultipleToolCalls() throws AgentExecutionException {
-            Tool calculatorTool = new CalculatorTool();
-            Tool weatherTool = new MockWeatherTool();
+            AbstractTool calculatorTool = new CalculatorTool();
+            AbstractTool weatherTool = new MockWeatherTool();
 
             Agent agent = new DefaultAgentFactory().createAgent()
                     .model(chatModel)
@@ -357,18 +359,19 @@ class OpenAIIntegrationTest {
             StringBuilder streamOutput = new StringBuilder();
             agent.stream(request, new StreamCallback() {
                 @Override
-                public void onToken(String token) {
+                public void onToken(StreamChunk chunk) {
+                    String token = chunk.getContent() != null ? chunk.getContent() : "";
                     streamOutput.append(token);
                     System.out.print(token);
                 }
 
                 @Override
-                public void onToolCall(ToolCall toolCall) {
+                public void onToolCall(StreamChunk chunk, ToolCall toolCall) {
                     System.out.println("\n[工具调用: " + toolCall.getName() + "]");
                 }
 
                 @Override
-                public void onComplete() {
+                public void onComplete(StreamChunk finalChunk) {
                     System.out.println("\n[完成]");
                 }
             });
@@ -394,19 +397,17 @@ class OpenAIIntegrationTest {
         }
 
         @Override
-        public String getParametersSchema() {
-            return """
-                {
-                    "type": "object",
-                    "properties": {
-                        "text": {
-                            "type": "string",
-                            "description": "要统计的文本"
-                        }
-                    },
-                    "required": ["text"]
-                }
-                """;
+        public Map<String, Object> getParameters() {
+            return Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "text", Map.of(
+                        "type", "string",
+                        "description", "要统计的文本"
+                    )
+                ),
+                "required", List.of("text")
+            );
         }
 
         @Override
@@ -435,19 +436,17 @@ class OpenAIIntegrationTest {
         }
 
         @Override
-        public String getParametersSchema() {
-            return """
-                {
-                    "type": "object",
-                    "properties": {
-                        "expression": {
-                            "type": "string",
-                            "description": "数学表达式，如 '123 + 456'"
-                        }
-                    },
-                    "required": ["expression"]
-                }
-                """;
+        public Map<String, Object> getParameters() {
+            return Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "expression", Map.of(
+                        "type", "string",
+                        "description", "数学表达式，如 '123 + 456'"
+                    )
+                ),
+                "required", List.of("expression")
+            );
         }
 
         @Override
@@ -505,19 +504,17 @@ class OpenAIIntegrationTest {
         }
 
         @Override
-        public String getParametersSchema() {
-            return """
-                {
-                    "type": "object",
-                    "properties": {
-                        "city": {
-                            "type": "string",
-                            "description": "城市名称"
-                        }
-                    },
-                    "required": ["city"]
-                }
-                """;
+        public Map<String, Object> getParameters() {
+            return Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "city", Map.of(
+                        "type", "string",
+                        "description", "城市名称"
+                    )
+                ),
+                "required", List.of("city")
+            );
         }
 
         @Override

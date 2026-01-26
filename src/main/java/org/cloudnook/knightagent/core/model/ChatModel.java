@@ -106,47 +106,6 @@ public interface ChatModel {
         chatStream(messages, ChatOptions.defaults(), callback);
     }
 
-    /**
-     * 计算 Token 数量
-     * <p>
-     * 估算文本占用的 Token 数量，用于：
-     * <ul>
-     *   <li>检查是否超过模型的上下文窗口</li>
-     *   <li>计算调用成本</li>
-     *   <li>决定是否需要压缩历史消息</li>
-     * </ul>
-     * <p>
-     * 注意：这是估算值，实际 Token 数量可能因模型而异。
-     *
-     * @param text 要计算的文本
-     * @return 估算的 Token 数量
-     */
-    int countTokens(String text);
-
-    /**
-     * 计算消息列表的 Token 数量
-     *
-     * @param messages 消息列表
-     * @return 估算的 Token 数量
-     */
-    default int countTokens(List<Message> messages) {
-        int total = 0;
-        for (Message message : messages) {
-            if (message.getContent() != null) {
-                total += countTokens(message.getContent());
-            }
-        }
-        return total;
-    }
-
-    /**
-     * 获取模型能力描述
-     * <p>
-     * 返回模型支持的功能特性，如最大 Token 数、是否支持流式、是否支持工具调用等。
-     *
-     * @return 模型能力描述
-     */
-    ModelCapabilities getCapabilities();
 
     /**
      * 获取模型标识

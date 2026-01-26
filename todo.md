@@ -180,6 +180,24 @@
 
 ## ⏳ 阶段六：存储和优化
 
+- [ ] **OpenAI 流式 API 双格式支持**
+  - [ ] **Chat Completions API** (当前已支持)
+    - SSE `data:` 前缀格式
+    - 事件通过 `delta` 字段隐式区分
+    - 工具调用：`delta.tool_calls[]`
+  - [ ] **Responses API** (需要新增支持)
+    - 纯 JSON 事件格式（无 `data:` 前缀）
+    - 事件通过 `type` 字段显式区分
+    - 支持的事件类型：
+      - `response.output_item.added` - 输出项添加
+      - `response.function_call_arguments.delta` - 函数参数增量
+      - `response.function_call_arguments.done` - 函数参数完成
+      - `response.output_item.done` - 输出项完成
+      - `response.done` - 响应完成
+  - [ ] **自动格式检测**
+    - 根据响应格式自动切换解析器
+    - 配置项指定使用的 API 类型
+
 - [ ] **对话存储接口 (`ConversationStore`)**
   - 对话历史 CRUD
   - 实现：`InMemoryStore`, `PostgresStore`

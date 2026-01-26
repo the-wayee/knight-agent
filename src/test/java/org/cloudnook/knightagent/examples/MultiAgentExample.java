@@ -321,21 +321,11 @@ public class MultiAgentExample {
                                    org.cloudnook.knightagent.core.streaming.StreamCallback callback) {
                 try {
                     AIMessage response = chat(messages, options);
-                    callback.onToken(response.getContent());
-                    callback.onComplete();
+                    callback.onToken(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().content(response.getContent()).build());
+                    callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().finishReason("stop").build());
                 } catch (ModelException e) {
                     callback.onError(e);
                 }
-            }
-
-            @Override
-            public int countTokens(String text) {
-                return text.length();
-            }
-
-            @Override
-            public org.cloudnook.knightagent.core.model.ModelCapabilities getCapabilities() {
-                return org.cloudnook.knightagent.core.model.ModelCapabilities.builder().build();
             }
 
             @Override
@@ -388,18 +378,8 @@ public class MultiAgentExample {
             public void chatStream(List<Message> messages, ChatOptions options,
                                    org.cloudnook.knightagent.core.streaming.StreamCallback callback) {
                 AIMessage response = chat(messages, options);
-                callback.onToken(response.getContent());
-                callback.onComplete();
-            }
-
-            @Override
-            public int countTokens(String text) {
-                return text.length();
-            }
-
-            @Override
-            public org.cloudnook.knightagent.core.model.ModelCapabilities getCapabilities() {
-                return org.cloudnook.knightagent.core.model.ModelCapabilities.builder().build();
+                callback.onToken(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().content(response.getContent()).build());
+                callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().finishReason("stop").build());
             }
 
             @Override
@@ -428,18 +408,8 @@ public class MultiAgentExample {
             public void chatStream(List<Message> messages, ChatOptions options,
                                    org.cloudnook.knightagent.core.streaming.StreamCallback callback) {
                 AIMessage response = chat(messages, options);
-                callback.onToken(response.getContent());
-                callback.onComplete();
-            }
-
-            @Override
-            public int countTokens(String text) {
-                return text.length();
-            }
-
-            @Override
-            public org.cloudnook.knightagent.core.model.ModelCapabilities getCapabilities() {
-                return org.cloudnook.knightagent.core.model.ModelCapabilities.builder().build();
+                callback.onToken(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().content(response.getContent()).build());
+                callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().finishReason("stop").build());
             }
 
             @Override

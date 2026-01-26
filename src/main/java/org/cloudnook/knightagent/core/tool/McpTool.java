@@ -2,6 +2,8 @@ package org.cloudnook.knightagent.core.tool;
 
 import org.cloudnook.knightagent.core.message.ToolResult;
 
+import java.util.Map;
+
 /**
  * 工具接口
  * <p>
@@ -23,19 +25,17 @@ import org.cloudnook.knightagent.core.message.ToolResult;
  *     }
  *
  *     @Override
- *     public String getParametersSchema() {
- *         return """
- *             {
- *                 "type": "object",
- *                 "properties": {
- *                     "city": {
- *                         "type": "string",
- *                         "description": "城市名称"
- *                     }
- *                 },
- *                 "required": ["city"]
- *             }
- *             """;
+ *     public Map<String, Object> getParameters() {
+ *         return Map.of(
+ *             "type", "object",
+ *             "properties", Map.of(
+ *                 "city", Map.of(
+ *                     "type", "string",
+ *                     "description", "城市名称"
+ *                 )
+ *             ),
+ *             "required", List.of("city")
+ *         );
  *     }
  *
  *     @Override
@@ -88,37 +88,33 @@ public interface McpTool {
      * 定义工具接受的参数格式，使用 JSON Schema 标准。
      * LLM 会根据这个 Schema 生成符合要求的参数。
      * <p>
-     * 返回的字符串应该是有效的 JSON Schema 格式。
-     * <p>
      * 简化示例（无参数）：
      * <pre>{@code
-     * return "{\"type\": \"object\", \"properties\": {}}";
+     * return Map.of("type", "object", "properties", Map.of());
      * }</pre>
      * <p>
      * 完整示例：
      * <pre>{@code
-     * return """
-     *     {
-     *         "type": "object",
-     *         "properties": {
-     *             "city": {
-     *                 "type": "string",
-     *                 "description": "城市名称"
-     *             },
-     *             "unit": {
-     *                 "type": "string",
-     *                 "enum": ["celsius", "fahrenheit"],
-     *                 "description": "温度单位"
-     *             }
-     *         },
-     *         "required": ["city"]
-     *     }
-     *     """;
+     * return Map.of(
+     *     "type", "object",
+     *     "properties", Map.of(
+     *         "city", Map.of(
+     *             "type", "string",
+     *             "description", "城市名称"
+     *         ),
+     *         "unit", Map.of(
+     *             "type", "string",
+     *             "enum", List.of("celsius", "fahrenheit"),
+     *             "description", "温度单位"
+     *         )
+     *     ),
+     *     "required", List.of("city")
+     * );
      * }</pre>
      *
-     * @return JSON Schema 格式的参数定义
+     * @return 参数 Schema（Map 会被序列化为 JSON）
      */
-    String getParametersSchema();
+    Map<String, Object> getParameters();
 
     /**
      * 执行工具
@@ -138,25 +134,6 @@ public interface McpTool {
      * @throws ToolExecutionException 执行过程中的错误
      */
     ToolResult execute(String arguments) throws ToolExecutionException;
-
-    /**
-     * 获取参数定义对象
-     * <p>
-     * 返回用于序列化的参数定义对象（通常是 Map 或 POJO）。
-     * 默认实现尝试返回 JSON Schema 字符串（具体序列化由调用方处理，建议重写此方法返回 Map）。
-     *
-     * @return 参数定义对象
-     */
-    default Object getParameters() {
-        // 简单实现返回 Schema 字符串
-        // 注意：调用方（如 OpenAIChatModel）可能需要将其解析为 JSON 对象而不是字符串
-        // 这里为了兼容性，建议具体实现类重写此方法返回 Map<String, Object>
-        try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readTree(getParametersSchema());
-        } catch (Exception e) {
-            return getParametersSchema();
-        }
-    }
 
     /**
      * 判断工具是否需要身份验证

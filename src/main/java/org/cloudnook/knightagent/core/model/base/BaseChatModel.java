@@ -7,7 +7,6 @@ import org.cloudnook.knightagent.core.message.AIMessage;
 import org.cloudnook.knightagent.core.message.Message;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.model.ChatOptions;
-import org.cloudnook.knightagent.core.model.ModelCapabilities;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 
 import java.net.http.HttpClient;
@@ -22,9 +21,7 @@ import java.util.List;
  * <ul>
  *   <li>HTTP 客户端管理</li>
  *   <li>ObjectMapper 配置</li>
- *   <li>Token 计数（默认实现）</li>
  *   <li>消息类型转换</li>
- *   <li>能力推断</li>
  * </ul>
  * <p>
  * 子类只需实现 {@link #chat(List, ChatOptions)} 和
@@ -36,7 +33,6 @@ import java.util.List;
 public abstract class BaseChatModel implements ChatModel {
 
     protected final String modelId;
-    protected final ModelCapabilities capabilities;
     protected final HttpClient httpClient;
     protected final ObjectMapper objectMapper;
 
@@ -47,9 +43,6 @@ public abstract class BaseChatModel implements ChatModel {
      */
     protected BaseChatModel(BaseBuilder<?> builder) {
         this.modelId = builder.modelId;
-        this.capabilities = builder.capabilities != null
-                ? builder.capabilities
-                : inferCapabilities(builder.modelId);
         this.httpClient = builder.httpClient != null
                 ? builder.httpClient
                 : createDefaultHttpClient();
@@ -76,26 +69,6 @@ public abstract class BaseChatModel implements ChatModel {
     @Override
     public void chatStream(List<Message> messages, StreamCallback callback) throws org.cloudnook.knightagent.core.model.ModelException {
         chatStream(messages, ChatOptions.defaults(), callback);
-    }
-
-    @Override
-    public int countTokens(String text) {
-        // 简单估算（子类可重写以获得更精确的结果）
-        int charCount = text.length();
-        int nonAscii = (int) text.chars().filter(c -> c > 127).count();
-        return (charCount - nonAscii) / 4 + nonAscii / 2 + 1;
-    }
-
-    @Override
-    public int countTokens(List<Message> messages) {
-        return messages.stream()
-                .mapToInt(m -> countTokens(m.getContent()))
-                .sum();
-    }
-
-    @Override
-    public ModelCapabilities getCapabilities() {
-        return capabilities;
     }
 
     @Override
@@ -159,16 +132,6 @@ public abstract class BaseChatModel implements ChatModel {
     }
 
     /**
-     * 推断模型能力
-     * <p>
-     * 子类应重写此方法以提供特定模型的能力信息。
-     *
-     * @param modelId 模型 ID
-     * @return 模型能力
-     */
-    protected abstract ModelCapabilities inferCapabilities(String modelId);
-
-    /**
      * 构建完整的 API URL
      *
      * @param baseUrl 基础 URL
@@ -194,7 +157,6 @@ public abstract class BaseChatModel implements ChatModel {
     protected abstract static class BaseBuilder<T extends BaseBuilder<T>> {
 
         protected String modelId;
-        protected ModelCapabilities capabilities;
         protected HttpClient httpClient;
         protected ObjectMapper objectMapper;
 
@@ -213,17 +175,6 @@ public abstract class BaseChatModel implements ChatModel {
          */
         public T modelId(String modelId) {
             this.modelId = modelId;
-            return self();
-        }
-
-        /**
-         * 设置模型能力
-         *
-         * @param capabilities 模型能力
-         * @return this
-         */
-        public T capabilities(ModelCapabilities capabilities) {
-            this.capabilities = capabilities;
             return self();
         }
 

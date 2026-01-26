@@ -468,18 +468,8 @@ public class StateInjectionExample {
             public void chatStream(List<Message> messages, ChatOptions options,
                                    org.cloudnook.knightagent.core.streaming.StreamCallback callback) throws ModelException {
                 AIMessage response = chat(messages, options);
-                callback.onToken(response.getContent());
-                callback.onComplete();
-            }
-
-            @Override
-            public int countTokens(String text) {
-                return text.length();
-            }
-
-            @Override
-            public org.cloudnook.knightagent.core.model.ModelCapabilities getCapabilities() {
-                return org.cloudnook.knightagent.core.model.ModelCapabilities.builder().build();
+                callback.onToken(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().content(response.getContent()).build());
+                callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder().finishReason("stop").build());
             }
 
             @Override

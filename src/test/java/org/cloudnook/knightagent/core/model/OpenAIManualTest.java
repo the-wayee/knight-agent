@@ -4,6 +4,7 @@ import org.cloudnook.knightagent.core.message.AIMessage;
 import org.cloudnook.knightagent.core.message.HumanMessage;
 import org.cloudnook.knightagent.core.message.Message;
 import org.cloudnook.knightagent.core.streaming.StreamCallbackAdapter;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
 
 import java.util.List;
 import java.util.Scanner;
@@ -94,12 +95,13 @@ public class OpenAIManualTest {
         try {
             model.chatStream(List.of(HumanMessage.of(userInput)), new StreamCallbackAdapter() {
                 @Override
-                public void onToken(String token) {
+                public void onToken(StreamChunk chunk) {
+                    String token = chunk.getContent() != null ? chunk.getContent() : "";
                     System.out.print(token);
                 }
 
                 @Override
-                public void onComplete() {
+                public void onComplete(StreamChunk finalChunk) {
                     System.out.println();
                     System.out.println("[流式输出完成]");
                 }

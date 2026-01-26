@@ -5,6 +5,7 @@ import org.cloudnook.knightagent.core.message.HumanMessage;
 import org.cloudnook.knightagent.core.message.Message;
 import org.cloudnook.knightagent.core.message.SystemMessage;
 import org.cloudnook.knightagent.core.streaming.StreamCallbackAdapter;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -107,13 +108,14 @@ class OpenAIChatModelTest {
 
         model.chatStream(messages, new StreamCallbackAdapter() {
             @Override
-            public void onToken(String token) {
+            public void onToken(StreamChunk chunk) {
+                String token = chunk.getContent() != null ? chunk.getContent() : "";
                 System.out.print(token);
                 fullResponse.append(token);
             }
 
             @Override
-            public void onComplete() {
+            public void onComplete(StreamChunk finalChunk) {
                 System.out.println("\n[Stream completed]");
             }
         });
@@ -143,36 +145,6 @@ class OpenAIChatModelTest {
 
     @Test
     @Disabled("Requires API key")
-    void testCountTokens() throws ModelException {
-        OpenAIChatModel model = createModel();
-
-        String text = "Hello, this is a test message for token counting.";
-        int tokens = model.countTokens(text);
-
-        assertTrue(tokens > 0);
-        System.out.println("Text: " + text);
-        System.out.println("Estimated tokens: " + tokens);
-    }
-
-    @Test
-    @Disabled("Requires API key")
-    void testModelCapabilities() throws ModelException {
-        OpenAIChatModel model = createModel();
-
-        ModelCapabilities capabilities = model.getCapabilities();
-
-        assertNotNull(capabilities);
-        assertTrue(capabilities.isGpt());
-        // 注意：final boolean 字段的 getter 名称在 Lombok 中可能不同
-        // capabilities.supportsStreaming 和 capabilities.supportsToolCalling 是直接字段访问
-
-        System.out.println("Model: " + model.getModelId());
-        System.out.println("Max context tokens: " + capabilities.getMaxContextTokens());
-        System.out.println("Max output tokens: " + capabilities.getMaxOutputTokens());
-    }
-
-    @Test
-    @Disabled("Requires API key")
     void testIsAvailable() throws ModelException {
         OpenAIChatModel model = createModel();
 
@@ -183,33 +155,11 @@ class OpenAIChatModelTest {
     }
 
     @Test
-    void testTokenCountEstimation() {
-        OpenAIChatModel model = OpenAIChatModel.builder()
-                .apiKey("test-key")
-                .build();
-
-        // 英文文本
-        int englishTokens = model.countTokens("Hello world, this is a test.");
-        assertTrue(englishTokens > 0);
-
-        // 中文文本
-        int chineseTokens = model.countTokens("你好世界，这是一个测试。");
-        assertTrue(chineseTokens > 0);
-
-        // 中文通常需要更多 token
-        assertTrue(chineseTokens >= englishTokens / 2);
-
-        System.out.println("English tokens: " + englishTokens);
-        System.out.println("Chinese tokens: " + chineseTokens);
-    }
-
-    @Test
     void testBuilderDefaults() {
         OpenAIChatModel model = OpenAIChatModel.builder()
                 .apiKey("test-key")
                 .build();
 
         assertEquals("gpt-3.5-turbo", model.getModelId());
-        assertNotNull(model.getCapabilities());
     }
 }

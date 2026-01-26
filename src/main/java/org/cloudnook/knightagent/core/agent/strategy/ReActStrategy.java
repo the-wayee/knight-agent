@@ -15,6 +15,7 @@ import org.cloudnook.knightagent.core.model.ModelException;
 import org.cloudnook.knightagent.core.state.AgentState;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 import org.cloudnook.knightagent.core.streaming.StreamCallbackAdapter;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.cloudnook.knightagent.core.tool.ToolExecutionException;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 import org.slf4j.Logger;
@@ -234,20 +235,23 @@ public class ReActStrategy implements ExecutionStrategy {
 
                 model.chatStream(messages, options, new StreamCallbackAdapter() {
                     @Override
-                    public void onToken(String token) {
-                        contentBuffer.append(token);
-                        fullContent.append(token);
-                        callback.onToken(token);
+                    public void onToken(StreamChunk chunk) {
+                        String token = chunk.getContent();
+                        if (token != null) {
+                            contentBuffer.append(token);
+                            fullContent.append(token);
+                        }
+                        callback.onToken(chunk);
                     }
 
                     @Override
-                    public void onToolCall(ToolCall toolCall) {
+                    public void onToolCall(StreamChunk chunk, ToolCall toolCall) {
                         collectedToolCalls.add(toolCall);
-                        callback.onToolCall(toolCall);
+                        callback.onToolCall(chunk, toolCall);
                     }
 
                     @Override
-                    public void onComplete() {
+                    public void onComplete(StreamChunk finalChunk) {
                          // 这里的 response 是 Model 层的，我们主要关注上面的 token/toolCall Accumulation
                          // 通常 ChatModel 的 stream 不会给完整 response，而是 onComplete()
                          // 所以保持适配器默认行为即可
@@ -294,9 +298,12 @@ public class ReActStrategy implements ExecutionStrategy {
                     .endTime(Instant.now())
                     .build();
 
-            // 完成回调
-            callback.onComplete();
-            
+            // 完成回调（传入空的 StreamChunk）
+            callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder()
+                    .model(model.getModelId())
+                    .finishReason("stop")
+                    .build());
+
             return response;
 
         } catch (org.cloudnook.knightagent.core.model.ModelException e) {

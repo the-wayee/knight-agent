@@ -15,12 +15,12 @@ import org.cloudnook.knightagent.core.middleware.builtin.LoggingMiddleware;
 import org.cloudnook.knightagent.core.middleware.builtin.StateInjectionMiddleware;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.model.ChatOptions;
-import org.cloudnook.knightagent.core.model.ModelCapabilities;
 import org.cloudnook.knightagent.core.model.ModelException;
 import org.cloudnook.knightagent.core.state.AgentState;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.cloudnook.knightagent.core.tool.MockWeatherTool;
-import org.cloudnook.knightagent.core.tool.Tool;
+import org.cloudnook.knightagent.core.tool.AbstractTool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -80,18 +80,8 @@ class AgentIntegrationTest {
         @Override
         public void chatStream(List<Message> messages, ChatOptions options, StreamCallback callback) {
             AIMessage response = chat(messages, options);
-            callback.onToken(response.getContent());
-            callback.onComplete();
-        }
-
-        @Override
-        public int countTokens(String text) {
-            return text.length();
-        }
-
-        @Override
-        public ModelCapabilities getCapabilities() {
-            return ModelCapabilities.builder().build();
+            callback.onToken(StreamChunk.builder().content(response.getContent()).build());
+            callback.onComplete(StreamChunk.builder().finishReason("stop").build());
         }
 
         @Override
@@ -145,18 +135,8 @@ class AgentIntegrationTest {
         @Override
         public void chatStream(List<Message> messages, ChatOptions options, StreamCallback callback) {
             AIMessage response = chat(messages, options);
-            callback.onToken(response.getContent());
-            callback.onComplete();
-        }
-
-        @Override
-        public int countTokens(String text) {
-            return text.length();
-        }
-
-        @Override
-        public ModelCapabilities getCapabilities() {
-            return ModelCapabilities.builder().build();
+            callback.onToken(StreamChunk.builder().content(response.getContent()).build());
+            callback.onComplete(StreamChunk.builder().finishReason("stop").build());
         }
 
         @Override
@@ -171,7 +151,7 @@ class AgentIntegrationTest {
     }
 
     private ChatModel mockModel;
-    private Tool mockWeatherTool;
+    private AbstractTool mockWeatherTool;
     private Checkpointer checkpointer;
 
     @BeforeEach
@@ -332,7 +312,7 @@ class AgentIntegrationTest {
         @Test
         @DisplayName("工具调用错误处理")
         void testToolCallError() throws AgentExecutionException {
-            Tool errorTool = new Tool() {
+            AbstractTool errorTool = new AbstractTool() {
                 @Override
                 public String getName() {
                     return "error_tool";
@@ -344,13 +324,13 @@ class AgentIntegrationTest {
                 }
 
                 @Override
-                public String getParametersSchema() {
-                    return "{}";
+                public Map<String, Object> getParameters() {
+                    return Map.of("type", "object", "properties", Map.of());
                 }
 
                 @Override
-                public ToolResult execute(String arguments) {
-                    return ToolResult.error("error-id", "工具执行失败");
+                protected ToolResult executeInternal(Map<String, Object> arguments) {
+                    return ToolResult.error(generateCallId(), "工具执行失败");
                 }
             };
 
@@ -608,16 +588,6 @@ class AgentIntegrationTest {
                 @Override
                 public void chatStream(List<Message> messages, ChatOptions options, StreamCallback callback) throws ModelException {
                     throw new ModelException("模拟模型错误");
-                }
-
-                @Override
-                public int countTokens(String text) {
-                    return text.length();
-                }
-
-                @Override
-                public ModelCapabilities getCapabilities() {
-                    return ModelCapabilities.builder().build();
                 }
 
                 @Override

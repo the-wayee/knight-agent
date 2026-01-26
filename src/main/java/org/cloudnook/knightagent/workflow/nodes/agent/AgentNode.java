@@ -18,6 +18,7 @@ import org.cloudnook.knightagent.core.mcp.McpToolRegistryWrapper;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.model.OpenAIChatModel;
 import org.cloudnook.knightagent.core.tool.McpTool;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.cloudnook.knightagent.workflow.node.AbstractNode;
 import org.cloudnook.knightagent.workflow.node.NodeContext;
 import org.cloudnook.knightagent.workflow.node.NodeExecutionResult;
@@ -172,9 +173,10 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
             // 使用流式执行（即使是同步等待，也通过 callback 获取事件）
             AgentResponse response = agent.stream(request, new org.cloudnook.knightagent.core.streaming.StreamCallback() {
                 @Override
-                public void onToken(String token) {
+                public void onToken(StreamChunk chunk) {
                     if (context.getEventConsumer() != null) {
                         try {
+                            String token = chunk.getContent() != null ? chunk.getContent() : "";
                             context.getEventConsumer().accept(
                                 org.cloudnook.knightagent.workflow.engine.ExecutionEvent.token(
                                     context.getExecutionId(), context.getNodeId(), token
@@ -187,7 +189,7 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
                 }
 
                 @Override
-                public void onToolCall(org.cloudnook.knightagent.core.message.ToolCall toolCall) {
+                public void onToolCall(StreamChunk chunk, org.cloudnook.knightagent.core.message.ToolCall toolCall) {
                     if (context.getEventConsumer() != null) {
                         try {
                             // 将参数 Map 转换为 JSON 字符串
@@ -203,7 +205,7 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
 
                             context.getEventConsumer().accept(
                                 org.cloudnook.knightagent.workflow.engine.ExecutionEvent.toolCall(
-                                    context.getExecutionId(), context.getNodeId(), 
+                                    context.getExecutionId(), context.getNodeId(),
                                     toolCall.getName(), argsJson
                                 )
                             );
@@ -214,7 +216,7 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
                 }
 
                 @Override
-                public void onReasoning(String reasoning) {
+                public void onReasoning(StreamChunk chunk, String reasoning) {
                      if (context.getEventConsumer() != null) {
                         try {
                             context.getEventConsumer().accept(
@@ -227,7 +229,7 @@ public class AgentNode extends AbstractNode<AgentNodeConfig> {
                         }
                     }
                 }
-                
+
                 @Override
                 public void onError(Throwable error) {
                     log.error("Agent stream error", error);

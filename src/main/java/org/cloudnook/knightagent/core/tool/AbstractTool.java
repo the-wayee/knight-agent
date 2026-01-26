@@ -27,16 +27,17 @@ import java.util.Map;
  *     }
  *
  *     @Override
- *     public String getParametersSchema() {
- *         return """
- *             {
- *                 "type": "object",
- *                 "properties": {
- *                     "city": {"type": "string"}
- *                 },
- *                 "required": ["city"]
- *             }
- *             """;
+ *     public Map<String, Object> getParameters() {
+ *         return Map.of(
+ *             "type", "object",
+ *             "properties", Map.of(
+ *                 "city", Map.of(
+ *                     "type", "string",
+ *                     "description", "城市名称"
+ *                 )
+ *             ),
+ *             "required", List.of("city")
+ *         );
  *     }
  *
  *     @Override

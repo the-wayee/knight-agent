@@ -155,11 +155,15 @@ public class MultiAgentSystem implements Agent {
             for (int i = 0; i < output.length(); i += 10) {
                 int end = Math.min(i + 10, output.length());
                 String token = output.substring(i, end);
-                callback.onToken(token);
+                callback.onToken(org.cloudnook.knightagent.core.streaming.StreamChunk.builder()
+                        .content(token)
+                        .build());
             }
-            callback.onComplete();
+            callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder()
+                    .finishReason("stop")
+                    .build());
         }
-        
+
         return response;
     }
 

@@ -47,16 +47,12 @@ public class McpToolWrapper extends AbstractTool {
     }
 
     @Override
-    public String getParametersSchema() {
-        try {
-            if (description.getInputSchema() == null || description.getInputSchema().isEmpty()) {
-                return "{\"type\": \"object\", \"properties\": {}}";
-            }
-            return objectMapper.writeValueAsString(description.getInputSchema());
-        } catch (JsonProcessingException e) {
-            log.error("序列化参数 schema 失败", e);
-            return "{\"type\": \"object\", \"properties\": {}}";
+    public java.util.Map<String, Object> getParameters() {
+        if (description.getInputSchema() == null || description.getInputSchema().isEmpty()) {
+            return java.util.Map.of("type", "object", "properties", java.util.Map.of());
         }
+        // InputSchema 已经是 Map 结构，直接返回
+        return description.getInputSchema();
     }
 
     @Override

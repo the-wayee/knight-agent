@@ -2,6 +2,7 @@ package org.cloudnook.knightagent.core.tool;
 
 import org.cloudnook.knightagent.core.message.ToolResult;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,19 +26,17 @@ public class MockWeatherTool extends AbstractTool {
     }
 
     @Override
-    public String getParametersSchema() {
-        return """
-            {
-                "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "城市名称"
-                    }
-                },
-                "required": ["city"]
-            }
-            """;
+    public Map<String, Object> getParameters() {
+        return Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "city", Map.of(
+                                "type", "string",
+                                "description", "城市名称"
+                        )
+                ),
+                "required", List.of("city")
+        );
     }
 
     @Override

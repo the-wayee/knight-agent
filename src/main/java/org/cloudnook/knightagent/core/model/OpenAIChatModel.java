@@ -4,27 +4,30 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.Data;
-import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.cloudnook.knightagent.core.message.AIMessage;
-import org.cloudnook.knightagent.core.message.HumanMessage;
 import org.cloudnook.knightagent.core.message.Message;
-import org.cloudnook.knightagent.core.message.SystemMessage;
 import org.cloudnook.knightagent.core.message.ToolCall;
 import org.cloudnook.knightagent.core.message.ToolMessage;
+import org.cloudnook.knightagent.core.model.base.BaseChatModel;
+import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * OpenAI 聊天模型实现
@@ -45,8 +48,8 @@ import java.util.List;
  * // 流式调用
  * model.chatStream(List.of(HumanMessage.of("你好")), new StreamCallbackAdapter() {
  *     @Override
- *     public void onToken(String token) {
- *         System.out.print(token);
+ *     public void onToken(StreamChunk chunk) {
+ *         System.out.print(chunk.getContent());
  *     }
  * });
  * }</pre>
@@ -55,59 +58,21 @@ import java.util.List;
  * @since 1.0.0
  */
 @Slf4j
-public class OpenAIChatModel implements ChatModel {
+public class OpenAIChatModel extends BaseChatModel {
 
     private static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
     private static final String DEFAULT_MODEL = "gpt-3.5-turbo";
     private static final String CHAT_ENDPOINT = "/chat/completions";
 
     private final String apiKey;
-    private final String modelId;
     private final String baseUrl;
     private final String organizationId;
-    private final ModelCapabilities capabilities;
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
 
     private OpenAIChatModel(Builder builder) {
+        super(builder);
         this.apiKey = builder.apiKey;
-        this.modelId = builder.modelId != null ? builder.modelId : DEFAULT_MODEL;
         this.baseUrl = builder.baseUrl != null ? builder.baseUrl : DEFAULT_BASE_URL;
         this.organizationId = builder.organizationId;
-        this.capabilities = builder.capabilities != null ? builder.capabilities : inferCapabilities(this.modelId);
-        this.httpClient = builder.httpClient != null ? builder.httpClient : createDefaultHttpClient();
-        this.objectMapper = builder.objectMapper != null ? builder.objectMapper : createDefaultObjectMapper();
-    }
-
-    private static HttpClient createDefaultHttpClient() {
-        return HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
-                .build();
-    }
-
-    private static ObjectMapper createDefaultObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        return mapper;
-    }
-
-    private static ModelCapabilities inferCapabilities(String modelId) {
-        if (modelId.contains("gpt-4")) {
-            if (modelId.contains("vision") || modelId.contains("o1")) {
-                return ModelCapabilities.builder()
-                        .maxContextTokens(128000)
-                        .maxOutputTokens(8192)
-                        .supportsStreaming(true)
-                        .supportsToolCalling(true)
-                        .supportsParallelToolCalling(true)
-                        .supportsSystemPrompt(true)
-                        .supportsMultimodal(true)
-                        .family("gpt")
-                        .build();
-            }
-            return ModelCapabilities.gpt4();
-        }
-        return ModelCapabilities.gpt35();
     }
 
     public static Builder builder() {
@@ -158,9 +123,6 @@ public class OpenAIChatModel implements ChatModel {
 
             log.debug("Sending streaming request to OpenAI: model={}, messages={}", modelId, messages.size());
 
-            StringBuilder contentBuilder = new StringBuilder();
-            List<ToolCall> toolCalls = new ArrayList<>();
-
             HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() != 200) {
@@ -168,10 +130,19 @@ public class OpenAIChatModel implements ChatModel {
                 throw new ModelException("OpenAI API returned status " + response.statusCode() + ": " + errorBody);
             }
 
-            parseStream(response.body(), callback, contentBuilder, toolCalls);
+            // 解析 SSE 流，返回最后一个 chunk
+            StreamChunk finalChunk = parseSSEStream(response.body(), callback);
 
             try {
-                callback.onComplete();
+                if (finalChunk != null) {
+                    callback.onComplete(finalChunk);
+                } else {
+                    // 如果没有收到任何数据，创建一个空的 chunk
+                    callback.onComplete(StreamChunk.builder()
+                            .model(modelId)
+                            .finishReason("unknown")
+                            .build());
+                }
             } catch (Exception e) {
                 log.error("Error in onComplete callback", e);
             }
@@ -185,38 +156,18 @@ public class OpenAIChatModel implements ChatModel {
         }
     }
 
-    @Override
-    public int countTokens(String text) {
-        int charCount = text.length();
-        int nonAscii = 0;
-        for (char c : text.toCharArray()) {
-            if (c > 127) {
-                nonAscii++;
-            }
-        }
-        return (charCount - nonAscii) / 4 + nonAscii / 2 + 1;
-    }
-
-    @Override
-    public ModelCapabilities getCapabilities() {
-        return capabilities;
-    }
-
-    @Override
-    public String getModelId() {
-        return modelId;
-    }
-
     // ==================== Builder ====================
 
-    public static class Builder {
+    public static class Builder extends BaseBuilder<Builder> {
+
         private String apiKey;
-        private String modelId;
         private String baseUrl;
         private String organizationId;
-        private ModelCapabilities capabilities;
-        private HttpClient httpClient;
-        private ObjectMapper objectMapper;
+
+        @Override
+        protected Builder self() {
+            return this;
+        }
 
         public Builder apiKey(String apiKey) {
             this.apiKey = apiKey;
@@ -238,17 +189,14 @@ public class OpenAIChatModel implements ChatModel {
             return this;
         }
 
-        public Builder capabilities(ModelCapabilities capabilities) {
-            this.capabilities = capabilities;
-            return this;
-        }
-
-        public Builder httpClient(HttpClient httpClient) {
+        @Override
+        public Builder httpClient(java.net.http.HttpClient httpClient) {
             this.httpClient = httpClient;
             return this;
         }
 
-        public Builder objectMapper(ObjectMapper objectMapper) {
+        @Override
+        public Builder objectMapper(com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
             this.objectMapper = objectMapper;
             return this;
         }
@@ -257,12 +205,18 @@ public class OpenAIChatModel implements ChatModel {
             if (apiKey == null || apiKey.isEmpty()) {
                 throw new IllegalArgumentException("API key is required");
             }
+            if (modelId == null || modelId.isEmpty()) {
+                this.modelId = DEFAULT_MODEL;
+            }
             return new OpenAIChatModel(this);
         }
     }
 
     // ==================== 内部方法 ====================
 
+    /**
+     * 构建请求对象
+     */
     private ChatRequest buildRequest(List<Message> messages, ChatOptions options, boolean stream) {
         List<ChatMessage> chatMessages = new ArrayList<>();
 
@@ -287,6 +241,9 @@ public class OpenAIChatModel implements ChatModel {
                 .build();
     }
 
+    /**
+     * 转换消息格式
+     */
     private ChatMessage convertMessage(Message message) {
         String role = switch (message.getType()) {
             case SYSTEM -> "system";
@@ -306,6 +263,9 @@ public class OpenAIChatModel implements ChatModel {
         return new ChatMessage(role, message.getContent(), null, null, null);
     }
 
+    /**
+     * 转换工具调用格式
+     */
     private List<ChatToolCall> convertToolCalls(List<ToolCall> toolCalls) {
         List<ChatToolCall> result = new ArrayList<>();
         for (ToolCall toolCall : toolCalls) {
@@ -315,11 +275,14 @@ public class OpenAIChatModel implements ChatModel {
         return result;
     }
 
+    /**
+     * 构建 HTTP 请求
+     */
     private HttpRequest buildHttpRequest(ChatRequest request, boolean stream) throws IOException {
         String requestBody = objectMapper.writeValueAsString(request);
 
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + CHAT_ENDPOINT))
+                .uri(buildUrl(baseUrl, CHAT_ENDPOINT))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(60));
@@ -333,6 +296,9 @@ public class OpenAIChatModel implements ChatModel {
                 .build();
     }
 
+    /**
+     * 处理同步响应
+     */
     private AIMessage handleResponse(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
@@ -380,100 +346,218 @@ public class OpenAIChatModel implements ChatModel {
         }
     }
 
-    private void parseStream(InputStream inputStream, StreamCallback callback,
-                             StringBuilder contentBuilder, List<ToolCall> toolCalls) throws IOException {
-        StringBuilder lineBuilder = new StringBuilder();
-        byte[] buffer = new byte[8192];
-        int bytesRead;
+    /**
+     * 解析 SSE (Server-Sent Events) 流
+     * <p>
+     * 使用 BufferedReader 逐行读取，避免 UTF-8 多字节字符被截断
+     *
+     * @param inputStream 输入流
+     * @param callback    流式回调
+     * @return 最后一个数据块（包含 finish_reason 和 usage）
+     * @throws IOException 读取失败
+     */
+    private StreamChunk parseSSEStream(InputStream inputStream, StreamCallback callback) throws IOException {
+        StreamChunk finalChunk = null;
 
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            String chunk = new String(buffer, 0, bytesRead, StandardCharsets.UTF_8);
-            for (int i = 0; i < chunk.length(); i++) {
-                char c = chunk.charAt(i);
-
-                if (c == '\n') {
-                    processStreamLine(lineBuilder.toString(), callback, contentBuilder, toolCalls);
-                    lineBuilder.setLength(0);
-                } else if (c != '\r') {
-                    lineBuilder.append(c);
+        // 使用 BufferedReader 按行读取，避免 UTF-8 多字节字符截断问题
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                StreamChunk chunk = processSSELine(line, callback);
+                // 记录最后一个有 finish_reason 或 usage 的 chunk
+                if (chunk != null && (chunk.isFinished() || chunk.hasUsage())) {
+                    finalChunk = chunk;
                 }
             }
         }
 
-        if (lineBuilder.length() > 0) {
-            processStreamLine(lineBuilder.toString(), callback, contentBuilder, toolCalls);
-        }
+        return finalChunk;
     }
 
-    private void processStreamLine(String line, StreamCallback callback,
-                                    StringBuilder contentBuilder, List<ToolCall> toolCalls) {
-        if (line.isEmpty() || !line.startsWith("data: ")) {
-            return;
+    /**
+     * 处理单行 SSE 数据
+     * <p>
+     * OpenAI SSE 流格式：
+     * <pre>{@code
+     * data: {
+     *   "id": "chatcmpl-123",
+     *   "object": "chat.completion.chunk",
+     *   "created": 1694268190,
+     *   "model": "gpt-3.5-turbo-0125",
+     *   "choices": [{
+     *     "index": 0,
+     *     "delta": {"content": "Hello"},
+     *     "finish_reason": null
+     *   }],
+     *   "usage": null
+     * }
+     * }</pre>
+     *
+     * @param line     一行数据
+     * @param callback 流式回调
+     * @return 构建的 StreamChunk，如果非 data 行返回 null
+     */
+    private StreamChunk processSSELine(String line, StreamCallback callback) {
+        // 跳过非 data 开头的行
+        if (!line.startsWith("data: ")) {
+            return null;
         }
 
+        // 提取 JSON 数据部分
         String data = line.substring(6).trim();
+
+        // [DONE] 表示流结束
         if ("[DONE]".equals(data)) {
-            return;
+            return null;
         }
 
         try {
             JsonNode root = objectMapper.readTree(data);
             JsonNode choices = root.get("choices");
             if (choices == null || choices.isEmpty()) {
-                return;
+                return null;
             }
 
-            JsonNode delta = choices.get(0).get("delta");
+            JsonNode choice = choices.get(0);
+            JsonNode delta = choice.get("delta");
 
-            if (delta.has("content") && !delta.get("content").isNull()) {
+            // 构建 StreamChunk
+            StreamChunk.StreamChunkBuilder chunkBuilder = StreamChunk.builder()
+                    .id(root.has("id") ? root.get("id").asText() : null)
+                    .model(root.has("model") ? root.get("model").asText() : null)
+                    .created(root.has("created") ? root.get("created").asLong() : null)
+                    .finishReason(choice.has("finish_reason") && !choice.get("finish_reason").isNull()
+                            ? choice.get("finish_reason").asText() : null);
+
+            // 处理 usage（只在最后一个 chunk 存在）
+            if (root.has("usage") && !root.get("usage").isNull()) {
+                JsonNode usageNode = root.get("usage");
+                chunkBuilder.usage(StreamChunk.Usage.builder()
+                        .promptTokens(usageNode.has("prompt_tokens") ? usageNode.get("prompt_tokens").asInt() : null)
+                        .completionTokens(usageNode.has("completion_tokens") ? usageNode.get("completion_tokens").asInt() : null)
+                        .totalTokens(usageNode.has("total_tokens") ? usageNode.get("total_tokens").asInt() : null)
+                        .build());
+            }
+
+            // 处理内容 token
+            if (delta != null && delta.has("content") && !delta.get("content").isNull()) {
                 String token = delta.get("content").asText();
-                contentBuilder.append(token);
+                chunkBuilder.content(token);
+
                 try {
-                    callback.onToken(token);
+                    callback.onToken(chunkBuilder.build());
                 } catch (Exception e) {
                     log.error("Error in onToken callback", e);
                 }
+                return chunkBuilder.build();
             }
 
-            if (delta.has("tool_calls") && !delta.get("tool_calls").isNull()) {
+            // 处理工具调用
+            if (delta != null && delta.has("tool_calls") && !delta.get("tool_calls").isNull()) {
                 for (JsonNode toolCallNode : delta.get("tool_calls")) {
-                    processToolCallDelta(toolCallNode, toolCalls, callback);
+                    processToolCallDelta(toolCallNode, callback, chunkBuilder.build());
                 }
+                return chunkBuilder.build();
             }
+
+            return chunkBuilder.build();
 
         } catch (Exception e) {
+            // SSE 解析失败，记录日志但不中断流
             log.error("Failed to parse SSE data: {}", data, e);
+            return null;
         }
     }
 
-    private void processToolCallDelta(JsonNode toolCallNode, List<ToolCall> toolCalls, StreamCallback callback) {
+    /**
+     * 工具调用增量状态管理
+     * <p>
+     * 跟踪每个工具调用是否已触发过回调，避免重复触发
+     */
+    private static class ToolCallDeltaTracker {
+        // index -> 已触发的工具调用 ID 集合
+        private final Map<Integer, Set<String>> triggeredCalls = new HashMap<>();
+
+        /**
+         * 检查是否已触发过该工具调用
+         *
+         * @param index 工具调用索引
+         * @param id    工具调用 ID
+         * @return true 如果已触发过
+         */
+        public boolean hasTriggered(int index, String id) {
+            Set<String> ids = triggeredCalls.get(index);
+            return ids != null && ids.contains(id);
+        }
+
+        /**
+         * 标记该工具调用已触发
+         *
+         * @param index 工具调用索引
+         * @param id    工具调用 ID
+         */
+        public void markTriggered(int index, String id) {
+            triggeredCalls.computeIfAbsent(index, k -> new HashSet<>()).add(id);
+        }
+
+        /**
+         * 清理指定索引的记录（用于重置）
+         *
+         * @param index 工具调用索引
+         */
+        public void clear(int index) {
+            triggeredCalls.remove(index);
+        }
+    }
+
+    /**
+     * 工具调用增量状态跟踪器（线程本地）
+     */
+    private static final ThreadLocal<ToolCallDeltaTracker> TOOL_CALL_TRACKER =
+            ThreadLocal.withInitial(ToolCallDeltaTracker::new);
+
+    /**
+     * 处理工具调用的增量更新
+     * <p>
+     * OpenAI SSE 流中，工具调用是分片传输的，需要累积拼接
+     *
+     * @param toolCallNode 工具调用增量节点
+     * @param callback     流式回调
+     * @param chunk        当前数据块
+     */
+    private void processToolCallDelta(JsonNode toolCallNode, StreamCallback callback, StreamChunk chunk) {
         int index = toolCallNode.get("index").asInt();
 
-        while (toolCalls.size() <= index) {
-            toolCalls.add(ToolCall.of("", "", ""));
-        }
-
-        ToolCall toolCall = toolCalls.get(index);
-
-        if (toolCallNode.has("id")) {
-            toolCall.setId(toolCallNode.get("id").asText());
-        }
+        // 获取当前索引的增量数据
+        String id = toolCallNode.has("id") ? toolCallNode.get("id").asText() : null;
+        String name = null;
+        String argsDelta = null;
 
         if (toolCallNode.has("function")) {
             JsonNode function = toolCallNode.get("function");
             if (function.has("name")) {
-                toolCall.setName(function.get("name").asText());
+                name = function.get("name").asText();
             }
             if (function.has("arguments")) {
-                String currentArgs = toolCall.getArguments();
-                String newArgs = function.get("arguments").asText();
-                toolCall.setArguments(currentArgs != null ? currentArgs + newArgs : newArgs);
+                argsDelta = function.get("arguments").asText();
             }
+        }
 
-            String args = toolCall.getArguments();
-            if (args != null && isValidJson(args)) {
+        // 累积完整的工具调用信息
+        String callId = getToolCallId(index, id);
+        String callName = getToolCallName(index, name);
+        String callArgs = getToolCallArgs(index, argsDelta);
+
+        // 只有当 arguments 形成完整 JSON 时才触发回调
+        if (callArgs != null && isValidJson(callArgs)) {
+            ToolCall toolCall = ToolCall.of(callId, callName, callArgs);
+
+            // 检查是否已触发过，避免重复
+            ToolCallDeltaTracker tracker = TOOL_CALL_TRACKER.get();
+            if (!tracker.hasTriggered(index, callId)) {
                 try {
-                    callback.onToolCall(toolCall);
+                    callback.onToolCall(chunk, toolCall);
+                    tracker.markTriggered(index, callId);
                 } catch (Exception e) {
                     log.error("Error in onToolCall callback", e);
                 }
@@ -481,7 +565,78 @@ public class OpenAIChatModel implements ChatModel {
         }
     }
 
+    /**
+     * 工具调用增量数据存储
+     * <p>
+     * index -> {id, name, arguments}
+     */
+    private static final ThreadLocal<Map<Integer, ToolCallDelta>> TOOL_CALL_DELTAS =
+            ThreadLocal.withInitial(HashMap::new);
+
+    /**
+     * 工具调用增量数据
+     */
+    private static class ToolCallDelta {
+        String id;
+        String name;
+        StringBuilder arguments = new StringBuilder();
+    }
+
+    /**
+     * 获取或创建工具调用增量数据
+     */
+    private ToolCallDelta getToolCallDelta(int index) {
+        Map<Integer, ToolCallDelta> deltas = TOOL_CALL_DELTAS.get();
+        return deltas.computeIfAbsent(index, k -> new ToolCallDelta());
+    }
+
+    /**
+     * 获取工具调用 ID
+     */
+    private String getToolCallId(int index, String id) {
+        if (id != null && !id.isEmpty()) {
+            ToolCallDelta delta = getToolCallDelta(index);
+            delta.id = id;
+            return id;
+        }
+        return getToolCallDelta(index).id;
+    }
+
+    /**
+     * 获取工具调用名称
+     */
+    private String getToolCallName(int index, String name) {
+        if (name != null && !name.isEmpty()) {
+            ToolCallDelta delta = getToolCallDelta(index);
+            delta.name = name;
+            return name;
+        }
+        return getToolCallDelta(index).name;
+    }
+
+    /**
+     * 获取工具调用参数（累积）
+     */
+    private String getToolCallArgs(int index, String argsDelta) {
+        if (argsDelta != null && !argsDelta.isEmpty()) {
+            ToolCallDelta delta = getToolCallDelta(index);
+            delta.arguments.append(argsDelta);
+            return delta.arguments.toString();
+        }
+        ToolCallDelta delta = getToolCallDelta(index);
+        return delta.arguments.length() > 0 ? delta.arguments.toString() : null;
+    }
+
+    /**
+     * 检查是否为有效的 JSON
+     *
+     * @param json JSON 字符串
+     * @return true 如果有效
+     */
     private boolean isValidJson(String json) {
+        if (json == null || json.isEmpty()) {
+            return false;
+        }
         try {
             objectMapper.readTree(json);
             return true;
@@ -490,6 +645,9 @@ public class OpenAIChatModel implements ChatModel {
         }
     }
 
+    /**
+     * 转换工具列表为 OpenAI 格式
+     */
     private List<ChatTool> convertTools(List<org.cloudnook.knightagent.core.tool.McpTool> tools) {
         List<ChatTool> result = new ArrayList<>();
         for (org.cloudnook.knightagent.core.tool.McpTool tool : tools) {
@@ -505,9 +663,10 @@ public class OpenAIChatModel implements ChatModel {
 
     // ==================== DTO 类 ====================
 
-    // ==================== DTO 类 ====================
-
-    @Data
+    /**
+     * 聊天请求 DTO
+     */
+    @lombok.Data
     @lombok.Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private static class ChatRequest {
@@ -525,7 +684,10 @@ public class OpenAIChatModel implements ChatModel {
         private final String toolChoice;
     }
 
-    @Data
+    /**
+     * 聊天消息 DTO
+     */
+    @lombok.Data
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private static class ChatMessage {
         private final String role;
@@ -537,13 +699,19 @@ public class OpenAIChatModel implements ChatModel {
         private final List<ChatToolCall> toolCalls;
     }
 
-    @Data
+    /**
+     * 工具定义 DTO
+     */
+    @lombok.Data
     private static class ChatTool {
         private final String type;
         private final ChatToolFunction function;
     }
-    
-    @Data
+
+    /**
+     * 工具调用 DTO
+     */
+    @lombok.Data
     private static class ChatToolCall {
         private final String id;
         private final String type;
@@ -551,14 +719,20 @@ public class OpenAIChatModel implements ChatModel {
         private final ChatToolCallFunction function;
     }
 
-    @Data
+    /**
+     * 工具函数定义 DTO
+     */
+    @lombok.Data
     private static class ChatToolFunction {
         private final String name;
         private final String description;
         private final Object parameters;
     }
-    
-    @Data
+
+    /**
+     * 工具调用函数 DTO
+     */
+    @lombok.Data
     private static class ChatToolCallFunction {
         private final String name;
         private final String arguments;
