@@ -17,8 +17,14 @@ import java.util.List;
  *   <li>OpenAI (GPT-4, GPT-3.5)</li>
  *   <li>Anthropic (Claude)</li>
  *   <li>Google (Gemini)</li>
- *   <li>本地模型 (Ollama, LocalAI)</li>
+   *   <li>本地模型 (Ollama, LocalAI)</li>
  * </ul>
+ * <p>
+ * <b>线程安全：</b>
+ * 此接口的实现类<b>不需要保证线程安全</b>。
+ * 正常使用场景下，应该为每个请求/线程创建独立的 Model 实例，
+ * 或者通过依赖注入框架（如 Spring）为每个请求/作用域注入新的实例。
+ * 不支持同一个 Model 实例的并发调用。
  * <p>
  * 使用示例：
  * <pre>{@code
@@ -142,12 +148,4 @@ public interface ChatModel {
         // 默认空实现
     }
 
-    /**
-     * 获取模型版本
-     *
-     * @return 模型版本，默认 "1.0.0"
-     */
-    default String getVersion() {
-        return "1.0.0";
-    }
 }

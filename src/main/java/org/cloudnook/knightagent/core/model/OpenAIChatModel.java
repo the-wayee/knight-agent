@@ -13,7 +13,6 @@ import org.cloudnook.knightagent.core.model.base.BaseChatModel;
 import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 import org.cloudnook.knightagent.core.streaming.StreamCompleteResponse;
-import org.cloudnook.knightagent.core.streaming.StreamCompleteResponse;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -36,6 +35,17 @@ import java.util.Set;
  * <p>
  * 支持 OpenAI GPT-4、GPT-3.5 等模型的调用。
  * 使用 Java 11+ HttpClient，支持同步和流式调用。
+ * <p>
+ * <b>线程安全：</b>此类<b>不是线程安全的</b>。
+ * 每次调用 {@link #chat(List, ChatOptions)} 或 {@link #chatStream(List, ChatOptions, StreamCallback)}
+ * 时，会使用实例变量来跟踪工具调用状态。
+ * 因此，<b>不支持同一个实例的并发调用</b>。
+ * <p>
+ * 推荐的使用方式：
+ * <ul>
+ *   <li>为每个请求/线程创建新的 Model 实例</li>
+   *   <li>或使用依赖注入框架（如 Spring）为每个请求/作用域注入新的实例</li>
+ * </ul>
  * <p>
  * 使用示例：
  * <pre>{@code
@@ -138,7 +148,10 @@ public class OpenAIChatModel extends BaseChatModel {
             HttpResponse<InputStream> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() != 200) {
-                String errorBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
+                String errorBody;
+                try (InputStream is = response.body()) {
+                    errorBody = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                }
                 throw new ModelException("OpenAI API returned status " + response.statusCode() + ": " + errorBody);
             }
 

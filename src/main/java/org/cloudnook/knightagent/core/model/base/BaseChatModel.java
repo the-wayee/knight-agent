@@ -86,11 +86,6 @@ public abstract class BaseChatModel implements ChatModel {
         // 默认不关闭任何资源
     }
 
-    @Override
-    public String getVersion() {
-        return "1.0.0";
-    }
-
     // ==================== 工具方法 ====================
 
     /**
