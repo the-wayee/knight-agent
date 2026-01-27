@@ -12,6 +12,8 @@ import org.cloudnook.knightagent.core.message.ToolMessage;
 import org.cloudnook.knightagent.core.model.base.BaseChatModel;
 import org.cloudnook.knightagent.core.streaming.StreamChunk;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
+import org.cloudnook.knightagent.core.streaming.StreamCompleteResponse;
+import org.cloudnook.knightagent.core.streaming.StreamCompleteResponse;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -68,6 +70,12 @@ public class OpenAIChatModel extends BaseChatModel {
     private final String baseUrl;
     private final String organizationId;
 
+    // ==================== 工具调用增量状态管理 ====================
+    // 每次流式调用的临时状态，使用实例变量而非 ThreadLocal
+    // 在 chatStream 开始时清理，避免线程池复用时的状态污染
+    private final Map<Integer, ToolCallDelta> toolCallDeltas = new HashMap<>();
+    private final Set<String> triggeredToolCalls = new HashSet<>();
+
     private OpenAIChatModel(Builder builder) {
         super(builder);
         this.apiKey = builder.apiKey;
@@ -106,6 +114,10 @@ public class OpenAIChatModel extends BaseChatModel {
 
     @Override
     public void chatStream(List<Message> messages, ChatOptions options, StreamCallback callback) {
+        // 清理上次调用可能残留的工具调用状态
+        toolCallDeltas.clear();
+        triggeredToolCalls.clear();
+
         if (options == null) {
             options = ChatOptions.defaults();
         }
@@ -130,21 +142,13 @@ public class OpenAIChatModel extends BaseChatModel {
                 throw new ModelException("OpenAI API returned status " + response.statusCode() + ": " + errorBody);
             }
 
-            // 解析 SSE 流，返回最后一个 chunk
-            StreamChunk finalChunk = parseSSEStream(response.body(), callback);
+            // 解析 SSE 流，返回完整响应
+            StreamCompleteResponse completeResponse = parseSSEStream(response.body(), callback);
 
             try {
-                if (finalChunk != null) {
-                    callback.onComplete(finalChunk);
-                } else {
-                    // 如果没有收到任何数据，创建一个空的 chunk
-                    callback.onComplete(StreamChunk.builder()
-                            .model(modelId)
-                            .finishReason("unknown")
-                            .build());
-                }
+                callback.onCompletion(completeResponse);
             } catch (Exception e) {
-                log.error("Error in onComplete callback", e);
+                log.error("Error in onCompletion callback", e);
             }
 
         } catch (Exception e) {
@@ -353,25 +357,36 @@ public class OpenAIChatModel extends BaseChatModel {
      *
      * @param inputStream 输入流
      * @param callback    流式回调
-     * @return 最后一个数据块（包含 finish_reason 和 usage）
+     * @return 完整响应对象（包含累积的内容和工具调用）
      * @throws IOException 读取失败
      */
-    private StreamChunk parseSSEStream(InputStream inputStream, StreamCallback callback) throws IOException {
-        StreamChunk finalChunk = null;
+    private StreamCompleteResponse parseSSEStream(InputStream inputStream, StreamCallback callback) throws IOException {
+        // 累积器：收集完整内容
+        StringBuilder fullContent = new StringBuilder();
+        List<StreamCompleteResponse.ToolCallComplete> toolCalls = new ArrayList<>();
+        StreamChunk lastChunk = null;
 
         // 使用 BufferedReader 按行读取，避免 UTF-8 多字节字符截断问题
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                StreamChunk chunk = processSSELine(line, callback);
-                // 记录最后一个有 finish_reason 或 usage 的 chunk
-                if (chunk != null && (chunk.isFinished() || chunk.hasUsage())) {
-                    finalChunk = chunk;
+                StreamChunk chunk = processSSELine(line, callback, fullContent, toolCalls);
+                // 记录最后一个 chunk（用于获取 finish_reason 和 usage）
+                if (chunk != null) {
+                    lastChunk = chunk;
                 }
             }
         }
 
-        return finalChunk;
+        // 构建完整响应
+        return StreamCompleteResponse.builder()
+                .fullContent(fullContent.toString())
+                .toolCalls(toolCalls)
+                .finishReason(lastChunk != null ? lastChunk.getFinishReason() : "unknown")
+                .usage(lastChunk != null ? lastChunk.getUsage() : null)
+                .model(lastChunk != null ? lastChunk.getModel() : modelId)
+                .id(lastChunk != null ? lastChunk.getId() : null)
+                .build();
     }
 
     /**
@@ -393,11 +408,15 @@ public class OpenAIChatModel extends BaseChatModel {
      * }
      * }</pre>
      *
-     * @param line     一行数据
-     * @param callback 流式回调
+     * @param line           一行数据
+     * @param callback       流式回调
+     * @param fullContent    累积完整内容
+     * @param toolCalls      累积工具调用列表
      * @return 构建的 StreamChunk，如果非 data 行返回 null
      */
-    private StreamChunk processSSELine(String line, StreamCallback callback) {
+    private StreamChunk processSSELine(String line, StreamCallback callback,
+                                       StringBuilder fullContent,
+                                       List<StreamCompleteResponse.ToolCallComplete> toolCalls) {
         // 跳过非 data 开头的行
         if (!line.startsWith("data: ")) {
             return null;
@@ -444,6 +463,9 @@ public class OpenAIChatModel extends BaseChatModel {
                 String token = delta.get("content").asText();
                 chunkBuilder.content(token);
 
+                // 累积完整内容
+                fullContent.append(token);
+
                 try {
                     callback.onToken(chunkBuilder.build());
                 } catch (Exception e) {
@@ -455,7 +477,7 @@ public class OpenAIChatModel extends BaseChatModel {
             // 处理工具调用
             if (delta != null && delta.has("tool_calls") && !delta.get("tool_calls").isNull()) {
                 for (JsonNode toolCallNode : delta.get("tool_calls")) {
-                    processToolCallDelta(toolCallNode, callback, chunkBuilder.build());
+                    processToolCallDelta(toolCallNode, callback, chunkBuilder.build(), toolCalls);
                 }
                 return chunkBuilder.build();
             }
@@ -469,52 +491,6 @@ public class OpenAIChatModel extends BaseChatModel {
         }
     }
 
-    /**
-     * 工具调用增量状态管理
-     * <p>
-     * 跟踪每个工具调用是否已触发过回调，避免重复触发
-     */
-    private static class ToolCallDeltaTracker {
-        // index -> 已触发的工具调用 ID 集合
-        private final Map<Integer, Set<String>> triggeredCalls = new HashMap<>();
-
-        /**
-         * 检查是否已触发过该工具调用
-         *
-         * @param index 工具调用索引
-         * @param id    工具调用 ID
-         * @return true 如果已触发过
-         */
-        public boolean hasTriggered(int index, String id) {
-            Set<String> ids = triggeredCalls.get(index);
-            return ids != null && ids.contains(id);
-        }
-
-        /**
-         * 标记该工具调用已触发
-         *
-         * @param index 工具调用索引
-         * @param id    工具调用 ID
-         */
-        public void markTriggered(int index, String id) {
-            triggeredCalls.computeIfAbsent(index, k -> new HashSet<>()).add(id);
-        }
-
-        /**
-         * 清理指定索引的记录（用于重置）
-         *
-         * @param index 工具调用索引
-         */
-        public void clear(int index) {
-            triggeredCalls.remove(index);
-        }
-    }
-
-    /**
-     * 工具调用增量状态跟踪器（线程本地）
-     */
-    private static final ThreadLocal<ToolCallDeltaTracker> TOOL_CALL_TRACKER =
-            ThreadLocal.withInitial(ToolCallDeltaTracker::new);
 
     /**
      * 处理工具调用的增量更新
@@ -524,8 +500,10 @@ public class OpenAIChatModel extends BaseChatModel {
      * @param toolCallNode 工具调用增量节点
      * @param callback     流式回调
      * @param chunk        当前数据块
+     * @param toolCalls    累积工具调用列表
      */
-    private void processToolCallDelta(JsonNode toolCallNode, StreamCallback callback, StreamChunk chunk) {
+    private void processToolCallDelta(JsonNode toolCallNode, StreamCallback callback, StreamChunk chunk,
+                                       List<StreamCompleteResponse.ToolCallComplete> toolCalls) {
         int index = toolCallNode.get("index").asInt();
 
         // 获取当前索引的增量数据
@@ -553,25 +531,23 @@ public class OpenAIChatModel extends BaseChatModel {
             ToolCall toolCall = ToolCall.of(callId, callName, callArgs);
 
             // 检查是否已触发过，避免重复
-            ToolCallDeltaTracker tracker = TOOL_CALL_TRACKER.get();
-            if (!tracker.hasTriggered(index, callId)) {
+            if (!triggeredToolCalls.contains(callId)) {
+                // 添加到完整响应列表
+                toolCalls.add(StreamCompleteResponse.ToolCallComplete.builder()
+                        .id(callId)
+                        .name(callName)
+                        .arguments(callArgs)
+                        .build());
+
                 try {
                     callback.onToolCall(chunk, toolCall);
-                    tracker.markTriggered(index, callId);
+                    triggeredToolCalls.add(callId);
                 } catch (Exception e) {
                     log.error("Error in onToolCall callback", e);
                 }
             }
         }
     }
-
-    /**
-     * 工具调用增量数据存储
-     * <p>
-     * index -> {id, name, arguments}
-     */
-    private static final ThreadLocal<Map<Integer, ToolCallDelta>> TOOL_CALL_DELTAS =
-            ThreadLocal.withInitial(HashMap::new);
 
     /**
      * 工具调用增量数据
@@ -586,8 +562,7 @@ public class OpenAIChatModel extends BaseChatModel {
      * 获取或创建工具调用增量数据
      */
     private ToolCallDelta getToolCallDelta(int index) {
-        Map<Integer, ToolCallDelta> deltas = TOOL_CALL_DELTAS.get();
-        return deltas.computeIfAbsent(index, k -> new ToolCallDelta());
+        return toolCallDeltas.computeIfAbsent(index, k -> new ToolCallDelta());
     }
 
     /**

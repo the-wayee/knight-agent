@@ -45,15 +45,13 @@ import org.cloudnook.knightagent.core.message.ToolCall;
  * <ul>
  *   <li>{@link #onToken(StreamChunk)} - 增量 Token</li>
  *   <li>{@link #onToolCall(StreamChunk, ToolCall)} - 工具调用</li>
- *   <li>{@link #onComplete(StreamChunk)} - 流完成</li>
+ *   <li>{@link #onCompletion(StreamCompleteResponse)} - 流完成（完整响应）</li>
  *   <li>{@link #onError(Throwable)} - 错误</li>
  * </ul>
  * <p>
  * 使用示例：
  * <pre>{@code
  * StreamCallback callback = new StreamCallback() {
- *     private final StringBuilder fullContent = new StringBuilder();
- *     private int totalTokens = 0;
  *
  *     @Override
  *     public void onStart() {
@@ -62,17 +60,25 @@ import org.cloudnook.knightagent.core.message.ToolCall;
  *
  *     @Override
  *     public void onToken(StreamChunk chunk) {
- *         fullContent.append(chunk.getContent());
- *         System.out.print(chunk.getContent());
+ *         System.out.print(chunk.getContent());  // 实时输出每个 token
  *     }
  *
  *     @Override
- *     public void onComplete(StreamChunk finalChunk) {
- *         if (finalChunk.hasUsage()) {
- *             totalTokens = finalChunk.getUsage().getTotalTokens();
+ *     public void onCompletion(StreamCompleteResponse response) {
+ *         // 获取完整内容（框架已自动累积）
+ *         System.out.println("\n完整内容: " + response.getFullContent());
+ *
+ *         // 获取 token 用量
+ *         if (response.hasUsage()) {
+ *             System.out.println("总 tokens: " + response.getUsage().getTotalTokens());
  *         }
- *         System.out.println("\n完成！总长度: " + fullContent.length()
- *             + ", tokens: " + totalTokens);
+ *
+ *         // 检查工具调用
+ *         if (response.hasToolCalls()) {
+ *             for (ToolCallComplete toolCall : response.getToolCalls()) {
+ *                 System.out.println("调用工具: " + toolCall.getName());
+ *             }
+ *         }
  *     }
  * };
  * }</pre>
@@ -140,15 +146,17 @@ public interface StreamCallback {
      * 流完成
      * <p>
      * 当 LLM 完成所有输出（包括工具调用）后触发。
-     * 此时 {@link StreamChunk} 包含完整的使用情况：
+     * 此时 {@link StreamCompleteResponse} 包含完整的响应信息：
      * <ul>
-     *   <li>{@link StreamChunk#getFinishReason()} - 结束原因</li>
-     *   <li>{@link StreamChunk#getUsage()} - Token 使用情况</li>
+     *   <li>{@link StreamCompleteResponse#getFullContent()} - 完整文本内容（所有 token 拼接）</li>
+     *   <li>{@link StreamCompleteResponse#getToolCalls()} - 完整的工具调用列表</li>
+     *   <li>{@link StreamCompleteResponse#getFinishReason()} - 结束原因</li>
+     *   <li>{@link StreamCompleteResponse#getUsage()} - Token 使用情况</li>
      * </ul>
      *
-     * @param finalChunk 最后一个数据块，包含 finish_reason 和 usage
+     * @param response 完整响应对象，包含所有累积的数据
      */
-    default void onComplete(StreamChunk finalChunk) {
+    default void onCompletion(StreamCompleteResponse response) {
         // 默认空实现，子类可以选择性重写
     }
 

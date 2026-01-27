@@ -84,7 +84,7 @@ public interface ChatModel {
      * <ul>
      *   <li>Token 会增量地通过 {@link StreamCallback#onToken(String)} 传递</li>
      *   <li>工具调用事件会通过 {@link StreamCallback#onToolCall} 传递</li>
-     *   <li>流结束时调用 {@link StreamCallback#onComplete()}</li>
+     *   <li>流结束时调用 {@link StreamCallback#onCompletion(StreamCompleteResponse)}</li>
      *   <li>发生错误时调用 {@link StreamCallback#onError(Throwable)}</li>
      * </ul>
      *

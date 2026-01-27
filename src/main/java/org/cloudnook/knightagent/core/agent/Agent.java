@@ -77,7 +77,7 @@ public interface Agent {
      *   <li>增量 Token - 通过 {@link StreamCallback#onToken(String)}</li>
      *   <li>工具调用事件 - 通过 {@link StreamCallback#onToolCall}</li>
      *   <li>思考过程 - 通过 {@link StreamCallback#onReasoning}</li>
-     *   <li>完成/错误 - 通过 {@link StreamCallback#onComplete()}/ onError</li>
+     *   <li>完成/错误 - 通过 {@link StreamCallback#onCompletion}/ onError</li>
      * </ul>
      *
      * @param request  Agent 请求

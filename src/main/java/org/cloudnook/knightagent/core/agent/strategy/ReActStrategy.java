@@ -16,6 +16,7 @@ import org.cloudnook.knightagent.core.state.AgentState;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 import org.cloudnook.knightagent.core.streaming.StreamCallbackAdapter;
 import org.cloudnook.knightagent.core.streaming.StreamChunk;
+import org.cloudnook.knightagent.core.streaming.StreamCompleteResponse;
 import org.cloudnook.knightagent.core.tool.ToolExecutionException;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 import org.slf4j.Logger;
@@ -251,10 +252,9 @@ public class ReActStrategy implements ExecutionStrategy {
                     }
 
                     @Override
-                    public void onComplete(StreamChunk finalChunk) {
-                         // 这里的 response 是 Model 层的，我们主要关注上面的 token/toolCall Accumulation
-                         // 通常 ChatModel 的 stream 不会给完整 response，而是 onComplete()
-                         // 所以保持适配器默认行为即可
+                    public void onCompletion(StreamCompleteResponse response) {
+                         // 框架已自动累积完整内容，我们主要关注上面的 token/toolCall Accumulation
+                         // 完整响应在 response.getFullContent() 和 response.getToolCalls()
                     }
                 });
 
@@ -298,10 +298,12 @@ public class ReActStrategy implements ExecutionStrategy {
                     .endTime(Instant.now())
                     .build();
 
-            // 完成回调（传入空的 StreamChunk）
-            callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder()
-                    .model(model.getModelId())
+            // 完成回调（传入完整的 StreamCompleteResponse）
+            callback.onCompletion(org.cloudnook.knightagent.core.streaming.StreamCompleteResponse.builder()
+                    .fullContent(fullContent.toString())
+                    .toolCalls(java.util.Collections.emptyList())
                     .finishReason("stop")
+                    .model(model.getModelId())
                     .build());
 
             return response;

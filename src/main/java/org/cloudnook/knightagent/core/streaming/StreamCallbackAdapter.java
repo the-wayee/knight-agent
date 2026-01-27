@@ -11,21 +11,21 @@ import org.cloudnook.knightagent.core.message.ToolCall;
  * 使用示例：
  * <pre>{@code
  * StreamCallback callback = new StreamCallbackAdapter() {
- *     private final StringBuilder content = new StringBuilder();
- *     private int totalTokens = 0;
  *
  *     @Override
  *     public void onToken(StreamChunk chunk) {
- *         content.append(chunk.getContent());
- *         System.out.print(chunk.getContent());
+ *         System.out.print(chunk.getContent());  // 实时输出每个 token
  *     }
  *
  *     @Override
- *     public void onComplete(StreamChunk finalChunk) {
- *         if (finalChunk.hasUsage()) {
- *             totalTokens = finalChunk.getUsage().getTotalTokens();
+ *     public void onCompletion(StreamCompleteResponse response) {
+ *         // 获取完整内容（框架已自动累积）
+ *         System.out.println("\n完整内容: " + response.getFullContent());
+ *
+ *         // 获取 token 用量
+ *         if (response.hasUsage()) {
+ *             System.out.println("总 tokens: " + response.getUsage().getTotalTokens());
  *         }
- *         System.out.println("\n完整内容: " + content + ", tokens: " + totalTokens);
  *     }
  * };
  * }</pre>
@@ -58,7 +58,7 @@ public abstract class StreamCallbackAdapter implements StreamCallback {
     }
 
     @Override
-    public void onComplete(StreamChunk finalChunk) {
+    public void onCompletion(StreamCompleteResponse response) {
         this.finished = true;
     }
 

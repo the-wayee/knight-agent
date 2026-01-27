@@ -159,7 +159,8 @@ public class MultiAgentSystem implements Agent {
                         .content(token)
                         .build());
             }
-            callback.onComplete(org.cloudnook.knightagent.core.streaming.StreamChunk.builder()
+            callback.onCompletion(org.cloudnook.knightagent.core.streaming.StreamCompleteResponse.builder()
+                    .fullContent(output)
                     .finishReason("stop")
                     .build());
         }
