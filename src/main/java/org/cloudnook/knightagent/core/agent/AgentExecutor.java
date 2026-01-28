@@ -205,4 +205,21 @@ public class AgentExecutor implements Agent {
     public AgentConfig getConfig() {
         return config;
     }
+
+    /**
+     * 从审批恢复执行（Agent 接口实现）
+     *
+     * @param checkpointId checkpoint ID
+     * @param approval     审批请求（必须包含决策）
+     * @return Agent 响应
+     * @throws AgentExecutionException 执行失败
+     */
+    @Override
+    public AgentResponse resume(String checkpointId, ApprovalRequest approval) throws AgentExecutionException {
+        if (strategy instanceof ReActStrategy reactStrategy) {
+            return reactStrategy.resumeFromApproval(checkpointId, approval, executionContext);
+        } else {
+            throw new AgentExecutionException("该策略不支持从审批恢复执行: " + strategy.getName());
+        }
+    }
 }

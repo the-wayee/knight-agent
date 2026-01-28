@@ -122,6 +122,12 @@ public class ReActStrategy implements ExecutionStrategy {
                 for (ToolCall toolCall : finalMessage.getToolCalls()) {
                     // 通过中间件验证
                     boolean allowed = middlewareChain.beforeToolCall(toolCall, agentContext);
+
+                    // 检查是否需要人工审批
+                    if (agentContext.hasPendingApproval()) {
+                        return handleApprovalRequest(agentContext, state, request, startTime, startInstant, checkpointer, config, middlewareChain);
+                    }
+
                     if (!allowed || agentContext.isStopped()) {
                         continue;
                     }
@@ -368,5 +374,274 @@ public class ReActStrategy implements ExecutionStrategy {
             options = ChatOptions.defaults();
         }
         return options;
+    }
+
+    /**
+     * 处理审批请求
+     * <p>
+     * 保存当前状态到 checkpoint，返回"等待审批"响应。
+     */
+    private AgentResponse handleApprovalRequest(
+            AgentContext agentContext,
+            AgentState state,
+            AgentRequest request,
+            long startTime,
+            Instant startInstant,
+            Checkpointer checkpointer,
+            AgentConfig config,
+            MiddlewareChain middlewareChain) throws CheckpointException, org.cloudnook.knightagent.core.middleware.MiddlewareException {
+
+        org.cloudnook.knightagent.core.agent.ApprovalRequest approval = agentContext.getPendingApproval();
+
+        log.info("Agent 执行暂停，等待人工审批: 审批ID={}, 工具={}",
+                approval.getApprovalId(), approval.getToolName());
+
+        // 保存状态到 checkpoint
+        String checkpointId = null;
+        if (checkpointer != null && request.getThreadId() != null) {
+            checkpointId = checkpointer.save(request.getThreadId(), state);
+            approval.setCheckpointId(checkpointId);
+        }
+
+        // 构建等待审批的响应
+        AgentResponse response = AgentResponse.builder()
+                .output("等待人工审批: " + approval.getToolName())
+                .messages(state.getMessages())
+                .toolCalls(List.of(approval.getToolCall()))
+                .state(state)
+                .threadId(request.getThreadId())
+                .checkpointId(checkpointId)
+                .approvalRequest(approval)
+                .durationMs(System.currentTimeMillis() - startTime)
+                .startTime(startInstant)
+                .endTime(Instant.now())
+                .build();
+
+        // 通过中间件处理响应
+        middlewareChain.afterInvoke(response, agentContext);
+
+        return response;
+    }
+
+    /**
+     * 从审批恢复执行
+     * <p>
+     * 根据审批决策继续执行 Agent。
+     *
+     * @param checkpointId    checkpoint ID
+     * @param approval        审批请求（包含决策）
+     * @param context         执行上下文
+     * @return Agent 响应
+     */
+    public AgentResponse resumeFromApproval(
+            String checkpointId,
+            org.cloudnook.knightagent.core.agent.ApprovalRequest approval,
+            ExecutionContext context) throws AgentExecutionException {
+
+        long startTime = System.currentTimeMillis();
+        Instant startInstant = Instant.now();
+
+        Checkpointer checkpointer = context.getCheckpointer();
+        ToolInvoker toolInvoker = context.getToolInvoker();
+        AgentConfig config = context.getConfig();
+        MiddlewareChain middlewareChain = context.getMiddlewareChain();
+        ChatModel model = context.getModel();
+
+        try {
+            // 1. 从 checkpoint 恢复状态
+            if (checkpointer == null) {
+                throw new AgentExecutionException("Checkpointer 未配置，无法恢复执行");
+            }
+
+            AgentState state = checkpointer.load(approval.getThreadId(), checkpointId)
+                    .orElseThrow(() -> new AgentExecutionException("Checkpoint 不存在: " + checkpointId));
+
+            log.info("从 checkpoint 恢复执行: checkpointId={}, 决策={}", checkpointId, approval.getDecision());
+
+            // 2. 创建上下文（模拟恢复的执行环境）
+            AgentRequest originalRequest = AgentRequest.builder()
+                    .threadId(approval.getThreadId())
+                    .build();
+
+            AgentContext agentContext = new AgentContext(originalRequest);
+            agentContext.setState(state);
+
+            // 3. 根据审批决策处理
+            if (approval.getDecision() == org.cloudnook.knightagent.core.agent.ApprovalRequest.ApprovalDecision.REJECT) {
+                // 拒绝：将拒绝原因作为 ToolMessage 返回给 LLM
+                String rejectMessage = approval.getRejectReason() != null
+                        ? approval.getRejectReason()
+                        : "用户拒绝了该操作";
+
+                ToolMessage toolMessage = ToolMessage.builder()
+                        .toolCallId(approval.getToolCall().getId())
+                        .result("[用户拒绝] " + rejectMessage)
+                        .error(true)
+                        .errorMessage(rejectMessage)
+                        .build();
+
+                state = state.addMessage(toolMessage);
+
+                // 继续执行（让 LLM 根据拒绝原因调整策略）
+                return continueExecution(state, originalRequest, agentContext, context, startTime, startInstant);
+
+            } else if (approval.getDecision() == org.cloudnook.knightagent.core.agent.ApprovalRequest.ApprovalDecision.ALLOW) {
+                // 允许：使用原始参数执行工具
+                ToolResult result = toolInvoker.invoke(approval.getToolCall());
+
+                middlewareChain.afterToolCall(approval.getToolCall(), result, agentContext);
+
+                ToolMessage toolMessage = result.toMessage();
+                state = state.addMessage(toolMessage);
+
+                // 继续执行
+                return continueExecution(state, originalRequest, agentContext, context, startTime, startInstant);
+
+            } else if (approval.getDecision() == org.cloudnook.knightagent.core.agent.ApprovalRequest.ApprovalDecision.EDIT) {
+                // 编辑：使用修改后的参数执行工具
+                ToolCall modifiedToolCall = ToolCall.builder()
+                        .id(approval.getToolCall().getId())
+                        .name(approval.getToolName())
+                        .arguments(approval.getModifiedArguments())
+                        .build();
+
+                ToolResult result = toolInvoker.invoke(modifiedToolCall);
+
+                middlewareChain.afterToolCall(modifiedToolCall, result, agentContext);
+
+                ToolMessage toolMessage = result.toMessage();
+                state = state.addMessage(toolMessage);
+
+                // 继续执行
+                return continueExecution(state, originalRequest, agentContext, context, startTime, startInstant);
+            }
+
+            throw new AgentExecutionException("未知的审批决策: " + approval.getDecision());
+
+        } catch (ToolExecutionException e) {
+            throw new AgentExecutionException("工具执行失败: " + e.getMessage(), e, "TOOL_ERROR");
+        } catch (CheckpointException e) {
+            throw new AgentExecutionException("Checkpoint 操作失败: " + e.getMessage(), e, "CHECKPOINT_ERROR");
+        } catch (Exception e) {
+            throw new AgentExecutionException("恢复执行失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 继续执行（审批后的后续流程）
+     */
+    private AgentResponse continueExecution(
+            AgentState state,
+            AgentRequest request,
+            AgentContext agentContext,
+            ExecutionContext context,
+            long startTime,
+            Instant startInstant) throws AgentExecutionException {
+
+        ChatModel model = context.getModel();
+        ToolInvoker toolInvoker = context.getToolInvoker();
+        AgentConfig config = context.getConfig();
+        MiddlewareChain middlewareChain = context.getMiddlewareChain();
+        Checkpointer checkpointer = context.getCheckpointer();
+
+        try {
+            // 继续执行主循环
+            int maxIterations = getMaxIterations(request, config);
+            AIMessage finalMessage = null;
+
+            for (int i = agentContext.getIteration(); i < maxIterations; i++) {
+                agentContext.setIteration(i + 1);
+
+                log.debug("ReAct 迭代 {}/{}", i + 1, maxIterations);
+
+                // 构建消息列表
+                List<Message> messages = buildMessages(state, request, config);
+
+                // 调用 LLM
+                ChatOptions options = getChatOptions(config);
+                if (toolInvoker.getTools() != null && !toolInvoker.getTools().isEmpty()) {
+                    options = options.toBuilder()
+                            .tools(toolInvoker.getTools())
+                            .build();
+                }
+                finalMessage = model.chat(messages, options);
+
+                // 添加 AI 消息到状态
+                state = state.addMessage(finalMessage);
+
+                // 检查是否需要调用工具
+                if (!finalMessage.hasToolCalls()) {
+                    log.debug("无工具调用，结束循环");
+                    break;
+                }
+
+                // 执行工具调用
+                for (ToolCall toolCall : finalMessage.getToolCalls()) {
+                    // 通过中间件验证
+                    boolean allowed = middlewareChain.beforeToolCall(toolCall, agentContext);
+
+                    // 检查是否又需要审批（嵌套审批）
+                    if (agentContext.hasPendingApproval()) {
+                        return handleApprovalRequest(agentContext, state, request, startTime, startInstant, checkpointer, config, middlewareChain);
+                    }
+
+                    if (!allowed || agentContext.isStopped()) {
+                        continue;
+                    }
+
+                    // 执行工具
+                    ToolResult result = toolInvoker.invoke(toolCall);
+
+                    // 通过中间件处理结果
+                    middlewareChain.afterToolCall(toolCall, result, agentContext);
+
+                    // 添加工具消息到状态
+                    ToolMessage toolMessage = result.toMessage();
+                    state = state.addMessage(toolMessage);
+                }
+            }
+
+            // 应用状态归约器
+            if (config.getStateReducer() != null) {
+                AgentState oldState = state;
+                state = config.getStateReducer().reduce(oldState, state);
+            }
+
+            // 通过中间件处理状态更新
+            state = middlewareChain.onStateUpdate(state, state, agentContext);
+
+            // 保存检查点
+            String checkpointId = null;
+            if (config.isCheckpointEnabled() && request.getThreadId() != null) {
+                checkpointId = checkpointer.save(request.getThreadId(), state);
+            }
+
+            // 构建响应
+            AgentResponse response = AgentResponse.builder()
+                    .output(finalMessage != null ? finalMessage.getContent() : "")
+                    .messages(state.getMessages())
+                    .toolCalls(finalMessage != null ? finalMessage.getToolCalls() : List.of())
+                    .state(state)
+                    .threadId(request.getThreadId())
+                    .checkpointId(checkpointId)
+                    .durationMs(System.currentTimeMillis() - startTime)
+                    .startTime(startInstant)
+                    .endTime(Instant.now())
+                    .build();
+
+            // 通过中间件处理响应
+            middlewareChain.afterInvoke(response, agentContext);
+
+            return response;
+
+        } catch (org.cloudnook.knightagent.core.model.ModelException e) {
+            throw new AgentExecutionException("模型调用失败: " + e.getMessage(), e, "MODEL_ERROR");
+        } catch (ToolExecutionException e) {
+            throw new AgentExecutionException("工具执行失败: " + e.getMessage(), e, "TOOL_ERROR");
+        } catch (CheckpointException e) {
+            throw new AgentExecutionException("检查点操作失败: " + e.getMessage(), e, "CHECKPOINT_ERROR");
+        } catch (Exception e) {
+            throw new AgentExecutionException("Agent 执行失败: " + e.getMessage(), e);
+        }
     }
 }

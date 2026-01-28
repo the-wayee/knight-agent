@@ -87,10 +87,22 @@ public class AgentResponse {
     private final String error;
 
     /**
+     * 等待审批的请求（如果需要人工介入）
+     */
+    private final ApprovalRequest approvalRequest;
+
+    /**
      * 是否成功
      */
     public boolean isSuccess() {
         return error == null || error.isEmpty();
+    }
+
+    /**
+     * 是否需要审批
+     */
+    public boolean requiresApproval() {
+        return approvalRequest != null;
     }
 
     /**

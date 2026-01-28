@@ -116,4 +116,37 @@ public interface Agent {
     default AgentStatus getStatus() {
         return AgentStatus.idle();
     }
+
+    /**
+     * 从审批恢复执行
+     * <p>
+     * 当 Agent 执行被中断等待人工审批后，
+     * 使用此方法从 checkpoint 恢复执行。
+     * <p>
+     * 使用示例：
+     * <pre>{@code
+     * // 1. 执行 Agent
+     * AgentResponse response = agent.invoke(request);
+     *
+     * // 2. 检查是否需要审批
+     * if (response.requiresApproval()) {
+     *     ApprovalRequest approval = response.getApprovalRequest();
+     *
+     *     // 3. 展示审批界面，用户做出决策
+     *     // approval.reject("用户不允许删除这个文件");
+     *
+     *     // 4. 恢复执行
+     *     response = agent.resume(approval.getCheckpointId(), approval);
+     * }
+     * }</pre>
+     *
+     * @param checkpointId checkpoint ID
+     * @param approval     审批请求（必须包含决策：allow/reject/edit）
+     * @return Agent 响应
+     * @throws AgentExecutionException 执行失败
+     * @throws UnsupportedOperationException 如果 Agent 不支持恢复执行
+     */
+    default AgentResponse resume(String checkpointId, ApprovalRequest approval) throws AgentExecutionException {
+        throw new UnsupportedOperationException("该 Agent 不支持从审批恢复执行");
+    }
 }

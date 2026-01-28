@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.Getter;
 import org.cloudnook.knightagent.core.agent.AgentRequest;
 import org.cloudnook.knightagent.core.agent.AgentResponse;
+import org.cloudnook.knightagent.core.agent.ApprovalRequest;
 import org.cloudnook.knightagent.core.state.AgentState;
 
 import java.util.HashMap;
@@ -51,6 +52,14 @@ public class AgentContext {
     private boolean stopped;
 
     /**
+     * 待审批的请求
+     * <p>
+     * 当 HumanInTheLoopMiddleware 检测到需要审批的工具时，
+     * 会设置此字段，ReActStrategy 检测到此字段后会保存 checkpoint 并返回。
+     */
+    private ApprovalRequest pendingApproval;
+
+    /**
      * 自定义数据
      */
     @Getter
@@ -82,6 +91,13 @@ public class AgentContext {
         this.stopped = true;
     }
 
+    /**
+     * 是否有待审批的请求
+     */
+    public boolean hasPendingApproval() {
+        return pendingApproval != null;
+    }
+
     // ==================== 快照功能 ====================
 
     /**
@@ -96,6 +112,7 @@ public class AgentContext {
                 this.state,
                 this.iteration,
                 this.stopped,
+                this.pendingApproval,
                 Map.copyOf(this.data)
         );
     }
@@ -111,6 +128,7 @@ public class AgentContext {
         this.state = snapshot.state();
         this.iteration = snapshot.iteration();
         this.stopped = snapshot.stopped();
+        this.pendingApproval = snapshot.pendingApproval();
         this.data.clear();
         this.data.putAll(snapshot.data());
     }
@@ -178,6 +196,7 @@ public class AgentContext {
             AgentState state,
             int iteration,
             boolean stopped,
+            ApprovalRequest pendingApproval,
             Map<String, Object> data
     ) {}
 }

@@ -57,6 +57,10 @@ public class AgentStatus {
          */
         WAITING_FOR_TOOL,
         /**
+         * 等待人工审批
+         */
+        WAITING_FOR_APPROVAL,
+        /**
          * 等待用户输入
          */
         WAITING_FOR_USER,
