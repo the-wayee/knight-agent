@@ -1,19 +1,28 @@
 package org.cloudnook.knightagent.core.middleware;
 
+import lombok.Data;
+import lombok.Getter;
 import org.cloudnook.knightagent.core.agent.AgentRequest;
 import org.cloudnook.knightagent.core.agent.AgentResponse;
-import org.cloudnook.knightagent.core.message.ToolCall;
 import org.cloudnook.knightagent.core.state.AgentState;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * 中间件上下文
  * <p>
  * 在中间件链中传递的上下文信息。
  * 包含请求、响应、状态等数据。
+ * <p>
+ * 支持快照功能，可以创建不可变的时间点副本。
  *
  * @author KnightAgent
  * @since 1.0.0
  */
+@Data
 public class AgentContext {
 
     /**
@@ -44,7 +53,8 @@ public class AgentContext {
     /**
      * 自定义数据
      */
-    private final java.util.Map<String, Object> data;
+    @Getter
+    private final Map<String, Object> data = new HashMap<>();
 
     /**
      * 创建上下文
@@ -63,49 +73,6 @@ public class AgentContext {
      */
     public AgentContext(AgentRequest request) {
         this.request = request;
-        this.data = new java.util.HashMap<>();
-    }
-
-    // Getters and Setters
-
-    public AgentRequest getRequest() {
-        return request;
-    }
-
-    public void setRequest(AgentRequest request) {
-        this.request = request;
-    }
-
-    public AgentResponse getResponse() {
-        return response;
-    }
-
-    public void setResponse(AgentResponse response) {
-        this.response = response;
-    }
-
-    public AgentState getState() {
-        return state;
-    }
-
-    public void setState(AgentState state) {
-        this.state = state;
-    }
-
-    public int getIteration() {
-        return iteration;
-    }
-
-    public void setIteration(int iteration) {
-        this.iteration = iteration;
-    }
-
-    public boolean isStopped() {
-        return stopped;
-    }
-
-    public void setStopped(boolean stopped) {
-        this.stopped = stopped;
     }
 
     /**
@@ -115,7 +82,40 @@ public class AgentContext {
         this.stopped = true;
     }
 
-    // 自定义数据操作
+    // ==================== 快照功能 ====================
+
+    /**
+     * 创建上下文的不可变快照
+     *
+     * @return 不可变的上下文快照
+     */
+    public ContextSnapshot snapshot() {
+        return new ContextSnapshot(
+                this.request,
+                this.response,
+                this.state,
+                this.iteration,
+                this.stopped,
+                Map.copyOf(this.data)
+        );
+    }
+
+    /**
+     * 从快照恢复上下文
+     *
+     * @param snapshot 快照
+     */
+    public void restore(ContextSnapshot snapshot) {
+        this.request = snapshot.request();
+        this.response = snapshot.response();
+        this.state = snapshot.state();
+        this.iteration = snapshot.iteration();
+        this.stopped = snapshot.stopped();
+        this.data.clear();
+        this.data.putAll(snapshot.data());
+    }
+
+    // ==================== 自定义数据便捷方法 ====================
 
     /**
      * 设置自定义数据
@@ -134,8 +134,8 @@ public class AgentContext {
      * @return 值的 Optional 包装
      */
     @SuppressWarnings("unchecked")
-    public <T> java.util.Optional<T> get(String key) {
-        return java.util.Optional.ofNullable((T) this.data.get(key));
+    public <T> Optional<T> get(String key) {
+        return Optional.ofNullable((T) this.data.get(key));
     }
 
     /**
@@ -165,7 +165,19 @@ public class AgentContext {
      *
      * @return 键集合
      */
-    public java.util.Set<String> getKeys() {
+    public Set<String> getKeys() {
         return this.data.keySet();
     }
+
+    /**
+     * 上下文快照（不可变记录）
+     */
+    public record ContextSnapshot(
+            AgentRequest request,
+            AgentResponse response,
+            AgentState state,
+            int iteration,
+            boolean stopped,
+            Map<String, Object> data
+    ) {}
 }

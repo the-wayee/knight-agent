@@ -74,6 +74,10 @@ public class MiddlewareChain {
             try {
                 log.debug("执行 afterInvoke: {}", middleware.getName());
                 middleware.afterInvoke(response, context);
+                if (context.isStopped()) {
+                    log.debug("中间件停止执行: {}", middleware.getName());
+                    break;
+                }
             } catch (MiddlewareException e) {
                 throw e;
             } catch (Exception e) {
@@ -171,6 +175,56 @@ public class MiddlewareChain {
             }
         }
         return result;
+    }
+
+    /**
+     * 执行 onError
+     * <p>
+     * 当中间件链执行过程中发生异常时调用。
+     * 反向执行，与 afterInvoke 顺序一致。
+     *
+     * @param error   发生的异常
+     * @param context 执行上下文
+     */
+    public void onError(Throwable error, AgentContext context) {
+        // 反向执行 onError
+        for (int i = middlewares.size() - 1; i >= 0; i--) {
+            Middleware middleware = middlewares.get(i);
+            try {
+                log.debug("执行 onError: {}", middleware.getName());
+                middleware.onError(error, context);
+            } catch (MiddlewareException e) {
+                // onError 中再抛出异常，记录但不中断
+                log.warn("onError 失败: {} - {}", middleware.getName(), e.getMessage());
+            } catch (Exception e) {
+                log.warn("onError 异常: {} - {}", middleware.getName(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 执行 onFinally
+     * <p>
+     * 无论执行成功或失败都会调用。
+     * 反向执行，与 afterInvoke 顺序一致。
+     *
+     * @param context 执行上下文
+     * @param error   执行过程中的异常（如果有），null 表示执行成功
+     */
+    public void onFinally(AgentContext context, Throwable error) {
+        // 反向执行 onFinally
+        for (int i = middlewares.size() - 1; i >= 0; i--) {
+            Middleware middleware = middlewares.get(i);
+            try {
+                log.debug("执行 onFinally: {}", middleware.getName());
+                middleware.onFinally(context, error);
+            } catch (MiddlewareException e) {
+                // onFinally 中抛出异常，记录但不中断
+                log.warn("onFinally 失败: {} - {}", middleware.getName(), e.getMessage());
+            } catch (Exception e) {
+                log.warn("onFinally 异常: {} - {}", middleware.getName(), e.getMessage());
+            }
+        }
     }
 
     /**

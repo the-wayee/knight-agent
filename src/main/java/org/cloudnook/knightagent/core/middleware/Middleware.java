@@ -146,6 +146,49 @@ public interface Middleware {
     }
 
     /**
+     * 发生异常时拦截
+     * <p>
+     * 当中间件链执行过程中发生异常时调用。
+     * 可以用于：
+     * <ul>
+     *   <li>异常日志记录</li>
+     *   <li>异常转换</li>
+     *   <li>错误恢复</li>
+     *   <li>资源清理</li>
+     * </ul>
+     * <p>
+     * 注意：此方法按反向顺序调用（与 afterInvoke 一致）。
+     *
+     * @param error   发生的异常
+     * @param context 执行上下文
+     * @throws MiddlewareException 处理失败时抛出新异常
+     */
+    default void onError(Throwable error, AgentContext context) throws MiddlewareException {
+        // 默认空实现
+    }
+
+    /**
+     * 最终清理拦截
+     * <p>
+     * 无论执行成功或失败，都会调用此方法。
+     * 可以用于：
+     * <ul>
+     *   <li>资源释放</li>
+     *   <li>指标上报</li>
+     *   <li>事务清理</li>
+     * </ul>
+     * <p>
+     * 注意：此方法按反向顺序调用（与 afterInvoke 一致）。
+     * 即使 onError 中抛出异常，此方法也会被调用。
+     *
+     * @param context 执行上下文
+     * @param error   执行过程中的异常（如果有），null 表示执行成功
+     */
+    default void onFinally(AgentContext context, Throwable error) throws MiddlewareException {
+        // 默认空实现
+    }
+
+    /**
      * 获取中间件名称
      * <p>
      * 用于日志和调试。

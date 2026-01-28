@@ -185,27 +185,6 @@ public class StateInjectionMiddleware implements Middleware {
                 injectionMode, newSystemPrompt.length());
     }
 
-    @Override
-    public void afterInvoke(AgentResponse response, AgentContext context) {
-        // 响应完成后不需要处理
-    }
-
-    @Override
-    public boolean beforeToolCall(ToolCall toolCall, AgentContext context) {
-        // 不拦截工具调用
-        return true;
-    }
-
-    @Override
-    public void afterToolCall(ToolCall toolCall, ToolResult toolResult, AgentContext context) {
-        // 工具调用完成后不需要处理
-    }
-
-    @Override
-    public AgentState onStateUpdate(AgentState oldState, AgentState newState, AgentContext context) {
-        return newState;
-    }
-
     /**
      * 构建注入内容
      */

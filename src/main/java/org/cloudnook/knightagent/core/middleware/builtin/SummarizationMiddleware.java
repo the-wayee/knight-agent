@@ -77,27 +77,6 @@ public class SummarizationMiddleware implements Middleware {
     }
 
     @Override
-    public void beforeInvoke(AgentRequest request, AgentContext context) {
-        // 不修改请求，只在需要时通过状态进行摘要
-    }
-
-    @Override
-    public void afterInvoke(AgentResponse response, AgentContext context) {
-        // 响应已完成，不需要处理
-    }
-
-    @Override
-    public boolean beforeToolCall(ToolCall toolCall, AgentContext context) {
-        // 不拦截工具调用
-        return true;
-    }
-
-    @Override
-    public void afterToolCall(ToolCall toolCall, ToolResult toolResult, AgentContext context) {
-        // 工具调用完成后不需要处理
-    }
-
-    @Override
     public AgentState onStateUpdate(AgentState oldState, AgentState newState, AgentContext context) {
         if (summaryModel == null) {
             return newState;

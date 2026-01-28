@@ -38,12 +38,14 @@ import java.util.concurrent.ConcurrentHashMap;
  *     .build())
  *     .build();
  * }</pre>
+ * <p>
+ * <b>注意：</b>当使用终端审核模式时，使用完毕后应调用 {@link #close()} 方法释放资源。
  *
  * @author KnightAgent
  * @since 1.0.0
  */
 @Slf4j
-public class HumanInTheLoopMiddleware implements Middleware {
+public class HumanInTheLoopMiddleware implements Middleware, AutoCloseable {
 
     /**
      * 审核模式
@@ -99,6 +101,7 @@ public class HumanInTheLoopMiddleware implements Middleware {
     private final ReviewCallback callback;
     private final boolean promptInTerminal;
     private final Map<String, ReviewDecision> cache;
+    private Scanner scanner; // 延迟初始化的 Scanner
 
     private HumanInTheLoopMiddleware(Builder builder) {
         this.mode = builder.mode;
@@ -107,16 +110,6 @@ public class HumanInTheLoopMiddleware implements Middleware {
         this.callback = builder.callback;
         this.promptInTerminal = builder.promptInTerminal;
         this.cache = new ConcurrentHashMap<>();
-    }
-
-    @Override
-    public void beforeInvoke(AgentRequest request, AgentContext context) {
-        // 不修改请求
-    }
-
-    @Override
-    public void afterInvoke(AgentResponse response, AgentContext context) {
-        // 响应完成后不需要处理
     }
 
     @Override
@@ -146,16 +139,6 @@ public class HumanInTheLoopMiddleware implements Middleware {
                 yield true;
             }
         };
-    }
-
-    @Override
-    public void afterToolCall(ToolCall toolCall, ToolResult toolResult, AgentContext context) {
-        // 工具调用完成后不需要处理
-    }
-
-    @Override
-    public AgentState onStateUpdate(AgentState oldState, AgentState newState, AgentContext context) {
-        return newState;
     }
 
     /**
@@ -199,10 +182,20 @@ public class HumanInTheLoopMiddleware implements Middleware {
     }
 
     /**
+     * 获取或创建 Scanner 实例
+     */
+    private synchronized Scanner getScanner() {
+        if (scanner == null) {
+            scanner = new Scanner(System.in);
+        }
+        return scanner;
+    }
+
+    /**
      * 在终端中提示用户审核
      */
     private ReviewDecision promptInTerminal(ToolCall toolCall) {
-        Scanner scanner = new Scanner(System.in);
+        Scanner scanner = getScanner();
 
         System.out.println("\n===== 工具调用审核 ======");
         System.out.println("工具: " + toolCall.getName());
@@ -236,6 +229,19 @@ public class HumanInTheLoopMiddleware implements Middleware {
             if (decision != null) {
                 return decision;
             }
+        }
+    }
+
+    /**
+     * 关闭中间件，释放资源
+     * <p>
+     * 当使用终端审核模式时，应调用此方法关闭 Scanner。
+     */
+    @Override
+    public void close() {
+        if (scanner != null) {
+            scanner.close();
+            scanner = null;
         }
     }
 
