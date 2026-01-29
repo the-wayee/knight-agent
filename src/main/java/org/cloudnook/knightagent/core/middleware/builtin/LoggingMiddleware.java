@@ -84,12 +84,12 @@ public class LoggingMiddleware implements Middleware {
     }
 
     @Override
-    public boolean beforeToolCall(ToolCall toolCall, AgentContext context) {
+    public void beforeToolCall(ToolCall toolCall, AgentContext context) {
         if (logToolCalls) {
             log.info("→ 工具调用: {} [{}]", toolCall.getName(), toolCall.getId());
             log.debug("   参数: {}", toolCall.getArguments());
         }
-        return true; // 允许所有工具调用
+        // 不修改 context，允许工具正常执行
     }
 
     @Override
@@ -108,18 +108,12 @@ public class LoggingMiddleware implements Middleware {
     }
 
     @Override
-    public AgentState onStateUpdate(AgentState oldState, AgentState newState, AgentContext context) {
+    public AgentState onStateUpdate(AgentState state, AgentContext context) {
         if (logStateChanges) {
-            int oldMessageCount = oldState.getMessages().size();
-            int newMessageCount = newState.getMessages().size();
-            if (newMessageCount > oldMessageCount) {
-                log.debug("状态更新: 消息数 {} → {}", oldMessageCount, newMessageCount);
-            }
-            if (oldState.getVersion() != newState.getVersion()) {
-                log.debug("状态版本: {} → {}", oldState.getVersion(), newState.getVersion());
-            }
+            log.debug("状态更新: 消息数 {}, 版本 {}",
+                    state.getMessages().size(), state.getVersion());
         }
-        return newState;
+        return state;
     }
 
     /**

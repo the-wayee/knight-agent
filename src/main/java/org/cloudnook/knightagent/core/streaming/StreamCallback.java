@@ -75,7 +75,7 @@ import org.cloudnook.knightagent.core.message.ToolCall;
  *
  *         // 检查工具调用
  *         if (response.hasToolCalls()) {
- *             for (ToolCallComplete toolCall : response.getToolCalls()) {
+ *             for (ToolCall toolCall : response.getToolCalls()) {
  *                 System.out.println("调用工具: " + toolCall.getName());
  *             }
  *         }

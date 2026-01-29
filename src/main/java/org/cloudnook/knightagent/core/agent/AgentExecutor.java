@@ -3,45 +3,49 @@ package org.cloudnook.knightagent.core.agent;
 import org.cloudnook.knightagent.core.agent.strategy.ExecutionContext;
 import org.cloudnook.knightagent.core.agent.strategy.ExecutionStrategy;
 import org.cloudnook.knightagent.core.agent.strategy.ReActStrategy;
+import org.cloudnook.knightagent.core.checkpoint.CheckpointException;
 import org.cloudnook.knightagent.core.checkpoint.Checkpointer;
-import org.cloudnook.knightagent.core.message.*;
+import org.cloudnook.knightagent.core.message.ToolCall;
+import org.cloudnook.knightagent.core.message.ToolMessage;
+import org.cloudnook.knightagent.core.message.ToolResult;
 import org.cloudnook.knightagent.core.model.ChatModel;
 import org.cloudnook.knightagent.core.state.AgentState;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 import org.cloudnook.knightagent.core.tool.McpTool;
+import org.cloudnook.knightagent.core.tool.ToolExecutionException;
 import org.cloudnook.knightagent.core.tool.ToolInvoker;
 import org.cloudnook.knightagent.core.middleware.Middleware;
 import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Agent 执行器
  * <p>
- * 负责 Agent 的核心执行逻辑。
- * 实现工具调用循环、消息构建、状态管理等。
+ * 负责 Agent 的核心执行逻辑，包括：
+ * <ul>
+ *   <li>策略执行委托</li>
+ *   <li>人机交互处理（通用逻辑）</li>
+ *   <li>审批恢复执行（通用逻辑）</li>
+ * </ul>
  * 实现 {@link Agent} 接口，作为框架的主要入口点。
  * <p>
  * 执行流程：
  * <pre>
- * 1. 加载历史状态（如果有 Thread ID）
- * 2. 添加用户消息到状态
- * 3. 循环执行：
- *    a. 通过中间件处理
- *    b. 调用 LLM
- *    c. 如果有工具调用：
- *       - 通过中间件验证
- *       - 执行工具
- *       - 添加结果到消息列表
- *       - 继续循环
- *    d. 否则：结束循环
- * 4. 保存检查点
- * 5. 返回响应
+ * 1. 执行策略
+ * 2. 检查是否需要审批
+ * 3. 如果需要审批：保存 checkpoint，返回等待审批响应
+ * 4. 否则：返回正常响应
+ * </pre>
+ * <p>
+ * 恢复流程：
+ * <pre>
+ * 1. 从 checkpoint 恢复状态
+ * 2. 根据审批决策处理工具
+ * 3. 继续执行策略
  * </pre>
  *
  * @author KnightAgent
@@ -119,7 +123,7 @@ public class AgentExecutor implements Agent {
     /**
      * 执行 Agent（同步）
      * <p>
-     * 使用配置的执行策略执行请求。
+     * 使用配置的执行策略执行请求，并处理人机交互。
      *
      * @param request Agent 请求
      * @return Agent 响应
@@ -140,17 +144,21 @@ public class AgentExecutor implements Agent {
      * @throws AgentExecutionException 执行失败
      */
     public AgentResponse executeStream(AgentRequest request, StreamCallback callback) throws AgentExecutionException {
-        if (strategy instanceof ReActStrategy reactStrategy) {
-            return reactStrategy.executeStream(request, callback, executionContext);
-        } else {
-            throw new AgentExecutionException("流式执行暂不支持该策略: " + strategy.getName());
-        }
+        return strategy.executeStream(request, callback, executionContext);
     }
 
     // ==================== Agent 接口实现 ====================
 
     /**
      * 同步执行 Agent（Agent 接口实现）
+     * <p>
+     * 处理人机交互的通用逻辑：
+     * <ul>
+     *   <li>执行策略</li>
+     *   <li>检查是否需要审批</li>
+     *   <li>如果需要审批：保存 checkpoint（如果需要），返回等待审批响应</li>
+     *   <li>否则：返回正常响应</li>
+     * </ul>
      *
      * @param request Agent 请求
      * @return Agent 响应
@@ -158,7 +166,31 @@ public class AgentExecutor implements Agent {
      */
     @Override
     public AgentResponse invoke(AgentRequest request) throws AgentExecutionException {
-        return execute(request);
+        AgentResponse response = execute(request);
+
+        // 检查是否需要审批
+        if (response.requiresApproval()) {
+            ApprovalRequest approval = response.getApprovalRequest();
+
+            // 保存 checkpoint（如果策略没有保存）
+            if (approval.getCheckpointId() == null && checkpointer != null) {
+                try {
+                    String checkpointId = checkpointer.save(request.getThreadId(), response.getState());
+                    approval.setCheckpointId(checkpointId);
+                    response = response.toBuilder()
+                            .checkpointId(checkpointId)
+                            .approvalRequest(approval)
+                            .build();
+                } catch (CheckpointException e) {
+                    throw new AgentExecutionException("保存 checkpoint 失败: " + e.getMessage(), e, "CHECKPOINT_ERROR");
+                }
+            }
+
+            log.info("Agent 执行暂停，等待人工审批: 审批ID={}, 工具={}",
+                    approval.getApprovalId(), approval.getToolName());
+        }
+
+        return response;
     }
 
     /**
@@ -191,7 +223,7 @@ public class AgentExecutor implements Agent {
 
         List<AgentResponse> responses = new ArrayList<>();
         for (AgentRequest request : requests) {
-            responses.add(execute(request));
+            responses.add(invoke(request));
         }
         return responses;
     }
@@ -208,6 +240,13 @@ public class AgentExecutor implements Agent {
 
     /**
      * 从审批恢复执行（Agent 接口实现）
+     * <p>
+     * 通用的恢复执行逻辑，不依赖具体的 Strategy 实现：
+     * <ol>
+     *   <li>从 checkpoint 恢复状态</li>
+     *   <li>根据审批决策处理工具（REJECT/ALLOW/EDIT）</li>
+     *   <li>继续执行策略</li>
+     * </ol>
      *
      * @param checkpointId checkpoint ID
      * @param approval     审批请求（必须包含决策）
@@ -216,10 +255,106 @@ public class AgentExecutor implements Agent {
      */
     @Override
     public AgentResponse resume(String checkpointId, ApprovalRequest approval) throws AgentExecutionException {
-        if (strategy instanceof ReActStrategy reactStrategy) {
-            return reactStrategy.resumeFromApproval(checkpointId, approval, executionContext);
-        } else {
-            throw new AgentExecutionException("该策略不支持从审批恢复执行: " + strategy.getName());
+        if (checkpointer == null) {
+            throw new AgentExecutionException("Checkpointer 未配置，无法恢复执行");
         }
+
+        try {
+            // 1. 从 checkpoint 恢复状态
+            AgentState state = checkpointer.load(approval.getThreadId(), checkpointId)
+                    .orElseThrow(() -> new AgentExecutionException("Checkpoint 不存在: " + checkpointId));
+
+            log.info("从 checkpoint 恢复执行: checkpointId={}, 决策={}", checkpointId, approval.getDecision());
+
+            // 2. 根据审批决策处理工具
+            state = handleApprovalDecision(state, approval);
+
+            // 3. 构建继续执行的请求
+            AgentRequest continuationRequest = AgentRequest.builder()
+                    .threadId(approval.getThreadId())
+                    .state(state)
+                    .build();
+
+            // 4. 继续执行策略
+            return execute(continuationRequest);
+
+        } catch (CheckpointException e) {
+            throw new AgentExecutionException("Checkpoint 操作失败: " + e.getMessage(), e, "CHECKPOINT_ERROR");
+        } catch (ToolExecutionException e) {
+            throw new AgentExecutionException("工具执行失败: " + e.getMessage(), e, "TOOL_ERROR");
+        } catch (Exception e) {
+            throw new AgentExecutionException("恢复执行失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 处理审批决策
+     * <p>
+     * 根据审批决策对状态进行相应的处理：
+     * <ul>
+     *   <li>REJECT: 添加拒绝消息到状态</li>
+     *   <li>ALLOW: 执行工具，添加结果到状态</li>
+     *   <li>EDIT: 使用修改后的参数执行工具</li>
+     * </ul>
+     *
+     * @param state    当前状态
+     * @param approval 审批请求
+     * @return 更新后的状态
+     * @throws ToolExecutionException 工具执行失败
+     */
+    private AgentState handleApprovalDecision(AgentState state, ApprovalRequest approval) throws ToolExecutionException {
+        return switch (approval.getDecision()) {
+            case REJECT -> {
+                // 拒绝：将拒绝原因作为 ToolMessage 返回给 LLM
+                String rejectReason = approval.getRejectReason() != null
+                        ? approval.getRejectReason()
+                        : "用户拒绝了该操作";
+
+                ToolMessage toolMessage = ToolMessage.builder()
+                        .toolCallId(approval.getToolCall().getId())
+                        .result("[用户拒绝] " + rejectReason)
+                        .error(true)
+                        .errorMessage(rejectReason)
+                        .build();
+
+                yield state.addMessage(toolMessage);
+            }
+
+            case ALLOW -> {
+                // 允许：使用原始参数执行工具
+                ToolResult result = toolInvoker.invoke(approval.getToolCall());
+                try {
+                    middlewareChain.afterToolCall(approval.getToolCall(), result,
+                            new org.cloudnook.knightagent.core.middleware.AgentContext(
+                                    AgentRequest.builder().threadId(approval.getThreadId()).build()));
+                } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
+                    log.warn("中间件 afterToolCall 处理失败: {}", e.getMessage());
+                }
+
+                ToolMessage toolMessage = result.toMessage();
+                yield state.addMessage(toolMessage);
+            }
+
+            case EDIT -> {
+                // 编辑：使用修改后的参数执行工具
+                ToolCall modifiedToolCall = ToolCall.builder()
+                        .id(approval.getToolCall().getId())
+                        .name(approval.getToolName())
+                        .arguments(approval.getModifiedArguments())
+                        .build();
+
+                ToolResult result = toolInvoker.invoke(modifiedToolCall);
+                try {
+                    middlewareChain.afterToolCall(modifiedToolCall, result,
+                            new org.cloudnook.knightagent.core.middleware.AgentContext(
+                                    AgentRequest.builder().threadId(approval.getThreadId()).build()));
+                } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
+                    log.warn("中间件 afterToolCall 处理失败: {}", e.getMessage());
+                }
+
+                ToolMessage toolMessage = result.toMessage();
+                yield state.addMessage(toolMessage);
+            }
+        };
     }
 }

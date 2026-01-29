@@ -1,8 +1,10 @@
 package org.cloudnook.knightagent.core.agent.strategy;
 
+import org.cloudnook.knightagent.core.agent.AgentExecutionException;
 import org.cloudnook.knightagent.core.agent.AgentRequest;
 import org.cloudnook.knightagent.core.agent.AgentResponse;
 import org.cloudnook.knightagent.core.agent.ApprovalRequest;
+import org.cloudnook.knightagent.core.streaming.StreamCallback;
 
 /**
  * Agent 执行策略接口
@@ -22,15 +24,31 @@ import org.cloudnook.knightagent.core.agent.ApprovalRequest;
 public interface ExecutionStrategy {
 
     /**
-     * 执行 Agent 请求
+     * 执行 Agent 请求（同步）
      *
      * @param request  Agent 请求
-     * @param context 执行上下文
+     * @param context  执行上下文
      * @return Agent 响应
-     * @throws org.cloudnook.knightagent.core.agent.AgentExecutionException 执行失败
+     * @throws AgentExecutionException 执行失败
      */
     AgentResponse execute(AgentRequest request, ExecutionContext context)
-            throws org.cloudnook.knightagent.core.agent.AgentExecutionException;
+            throws AgentExecutionException;
+
+    /**
+     * 执行 Agent 请求（流式）
+     * <p>
+     * 实时通过回调返回 LLM 输出的 tokens。
+     *
+     * @param request  Agent 请求
+     * @param callback 流式回调
+     * @param context  执行上下文
+     * @return Agent 响应
+     * @throws AgentExecutionException 执行失败
+     */
+    default AgentResponse executeStream(AgentRequest request, StreamCallback callback, ExecutionContext context)
+            throws AgentExecutionException {
+        throw new AgentExecutionException("该策略不支持流式执行");
+    }
 
     /**
      * 从审批恢复执行

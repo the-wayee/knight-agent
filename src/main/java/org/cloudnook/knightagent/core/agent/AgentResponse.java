@@ -16,7 +16,7 @@ import java.util.Optional;
  * @since 1.0.0
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 public class AgentResponse {
 
     /**

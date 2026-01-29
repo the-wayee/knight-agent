@@ -2,6 +2,7 @@ package org.cloudnook.knightagent.core.streaming;
 
 import lombok.Builder;
 import lombok.Data;
+import org.cloudnook.knightagent.core.message.ToolCall;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,7 +36,7 @@ public class StreamCompleteResponse {
      * 流式输出过程中累积的所有工具调用。
      * 如果没有工具调用，此字段为空列表。
      */
-    private final List<ToolCallComplete> toolCalls;
+    private final List<ToolCall> toolCalls;
 
     /**
      * 结束原因
@@ -82,34 +83,5 @@ public class StreamCompleteResponse {
      */
     public boolean hasUsage() {
         return usage != null;
-    }
-
-    /**
-     * 获取工具调用列表（安全的 Optional 封装）
-     */
-    public Optional<List<ToolCallComplete>> getToolCalls() {
-        return Optional.ofNullable(toolCalls);
-    }
-
-    /**
-     * 工具调用完整信息
-     */
-    @Data
-    @Builder
-    public static class ToolCallComplete {
-        /**
-         * 工具调用 ID
-         */
-        private final String id;
-
-        /**
-         * 工具名称
-         */
-        private final String name;
-
-        /**
-         * 工具参数（完整的 JSON 字符串）
-         */
-        private final String arguments;
     }
 }

@@ -100,10 +100,10 @@ public class HumanInTheLoopMiddleware implements Middleware {
     }
 
     @Override
-    public boolean beforeToolCall(ToolCall toolCall, AgentContext context) {
+    public void beforeToolCall(ToolCall toolCall, AgentContext context) {
         // 检查是否需要审批
         if (!needsReview(toolCall)) {
-            return true;
+            return;
         }
 
         log.info("工具需要人工审批: 工具={}, 调用={}", toolCall.getName(), toolCall.getId());
@@ -112,14 +112,13 @@ public class HumanInTheLoopMiddleware implements Middleware {
         ApprovalRequest approval = ApprovalRequest.fromToolCall(
                 toolCall,
                 context.getRequest().getThreadId(),
-                null // checkpointId 会在 ReActStrategy 中设置
+                null // checkpointId 会在后续处理时设置
         );
 
-        // 设置到 context，ReActStrategy 会处理
+        // 设置到 context，Strategy 会处理
         context.setPendingApproval(approval);
 
-        // 返回 false 阻止工具执行
-        return false;
+        // 不需要调用 context.stop()，pendingApproval 会阻止工具执行
     }
 
     /**

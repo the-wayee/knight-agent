@@ -376,7 +376,7 @@ public class OpenAIChatModel extends BaseChatModel {
     private StreamCompleteResponse parseSSEStream(InputStream inputStream, StreamCallback callback) throws IOException {
         // 累积器：收集完整内容
         StringBuilder fullContent = new StringBuilder();
-        List<StreamCompleteResponse.ToolCallComplete> toolCalls = new ArrayList<>();
+        List<org.cloudnook.knightagent.core.message.ToolCall> toolCalls = new ArrayList<>();
         StreamChunk lastChunk = null;
 
         // 使用 BufferedReader 按行读取，避免 UTF-8 多字节字符截断问题
@@ -429,7 +429,7 @@ public class OpenAIChatModel extends BaseChatModel {
      */
     private StreamChunk processSSELine(String line, StreamCallback callback,
                                        StringBuilder fullContent,
-                                       List<StreamCompleteResponse.ToolCallComplete> toolCalls) {
+                                       List<org.cloudnook.knightagent.core.message.ToolCall> toolCalls) {
         // 跳过非 data 开头的行
         if (!line.startsWith("data: ")) {
             return null;
@@ -516,7 +516,7 @@ public class OpenAIChatModel extends BaseChatModel {
      * @param toolCalls    累积工具调用列表
      */
     private void processToolCallDelta(JsonNode toolCallNode, StreamCallback callback, StreamChunk chunk,
-                                       List<StreamCompleteResponse.ToolCallComplete> toolCalls) {
+                                       List<org.cloudnook.knightagent.core.message.ToolCall> toolCalls) {
         int index = toolCallNode.get("index").asInt();
 
         // 获取当前索引的增量数据
@@ -546,11 +546,7 @@ public class OpenAIChatModel extends BaseChatModel {
             // 检查是否已触发过，避免重复
             if (!triggeredToolCalls.contains(callId)) {
                 // 添加到完整响应列表
-                toolCalls.add(StreamCompleteResponse.ToolCallComplete.builder()
-                        .id(callId)
-                        .name(callName)
-                        .arguments(callArgs)
-                        .build());
+                toolCalls.add(toolCall);
 
                 try {
                     callback.onToolCall(chunk, toolCall);

@@ -92,20 +92,25 @@ public class MiddlewareChain {
 
     /**
      * 执行 beforeToolCall
-     *
-     * @return 如果返回 false，应该阻止工具调用
+     * <p>
+     * 中间件通过 context 控制行为：
+     * <ul>
+     *   <li>{@link AgentContext#stop()} - 停止执行</li>
+     *   <li> - 触发审批</li>
+     * </ul>
      */
-    public boolean beforeToolCall(org.cloudnook.knightagent.core.message.ToolCall toolCall, AgentContext context)
+    public void beforeToolCall(org.cloudnook.knightagent.core.message.ToolCall toolCall, AgentContext context)
             throws MiddlewareException {
         for (Middleware middleware : middlewares) {
             try {
                 log.debug("执行 beforeToolCall: {}", middleware.getName());
-                boolean allowed = middleware.beforeToolCall(toolCall, context);
-                if (!allowed) {
-                    log.debug("工具调用被阻止: {} by {}", toolCall.getName(), middleware.getName());
-                    return false;
-                }
+                middleware.beforeToolCall(toolCall, context);
                 if (context.isStopped()) {
+                    log.debug("中间件停止执行: {}", middleware.getName());
+                    break;
+                }
+                // 检查是否触发审批，如果有则停止后续中间件执行
+                if (context.hasPendingApproval()) {
                     break;
                 }
             } catch (MiddlewareException e) {
@@ -118,7 +123,6 @@ public class MiddlewareChain {
                 );
             }
         }
-        return true;
     }
 
     /**
@@ -150,14 +154,13 @@ public class MiddlewareChain {
      * 执行 onStateUpdate
      */
     public org.cloudnook.knightagent.core.state.AgentState onStateUpdate(
-            org.cloudnook.knightagent.core.state.AgentState oldState,
-            org.cloudnook.knightagent.core.state.AgentState newState,
+            org.cloudnook.knightagent.core.state.AgentState state,
             AgentContext context) throws MiddlewareException {
-        org.cloudnook.knightagent.core.state.AgentState result = newState;
+        org.cloudnook.knightagent.core.state.AgentState result = state;
         for (Middleware middleware : middlewares) {
             try {
                 log.debug("执行 onStateUpdate: {}", middleware.getName());
-                org.cloudnook.knightagent.core.state.AgentState modified = middleware.onStateUpdate(oldState, result, context);
+                org.cloudnook.knightagent.core.state.AgentState modified = middleware.onStateUpdate(result, context);
                 if (modified != null) {
                     result = modified;
                 }

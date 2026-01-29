@@ -77,20 +77,20 @@ public class SummarizationMiddleware implements Middleware {
     }
 
     @Override
-    public AgentState onStateUpdate(AgentState oldState, AgentState newState, AgentContext context) {
+    public AgentState onStateUpdate(AgentState state, AgentContext context) {
         if (summaryModel == null) {
-            return newState;
+            return state;
         }
 
-        List<Message> messages = newState.getMessages();
+        List<Message> messages = state.getMessages();
         if (messages.isEmpty()) {
-            return newState;
+            return state;
         }
 
         int currentTokens = tokenCounter.countTokens(messages);
         if (currentTokens <= maxTokens) {
             // 未超过阈值，不需要摘要
-            return newState;
+            return state;
         }
 
         log.info("对话历史超过 Token 限制（{}/{}），开始摘要...",
@@ -98,12 +98,12 @@ public class SummarizationMiddleware implements Middleware {
 
         try {
             List<Message> summarized = summarizeMessages(messages);
-            return new AgentState.Builder(newState)
+            return new AgentState.Builder(state)
                     .messages(summarized)
                     .build();
         } catch (ModelException e) {
             log.warn("摘要失败，保留原状态: {}", e.getMessage());
-            return newState;
+            return state;
         }
     }
 

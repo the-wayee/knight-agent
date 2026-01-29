@@ -90,17 +90,23 @@ public interface Middleware {
      *   <li>权限检查</li>
      *   <li>参数验证</li>
      *   <li>调用日志</li>
-     *   <li>阻止调用</li>
+     *   <li>触发审批 - 通过 {@link AgentContext#setPendingApproval(ApprovalRequest)}</li>
+     *   <li>阻止调用 - 通过 {@link AgentContext#stop()}</li>
+     * </ul>
+     * <p>
+     * 中间件通过修改 {@link AgentContext} 来控制工具调用的行为：
+     * <ul>
+     *   <li>默认行为 - 不做任何操作，工具正常执行</li>
+     *   <li>阻止执行 - 调用 {@code context.stop()}</li>
+     *   <li>触发审批 - 调用 {@code context.setPendingApproval(...)}</li>
      * </ul>
      *
      * @param toolCall 工具调用信息
      * @param context  执行上下文
-     * @return 如果返回 false，阻止该工具调用
      * @throws MiddlewareException 处理失败
      */
-    default boolean beforeToolCall(ToolCall toolCall, AgentContext context) throws MiddlewareException {
-        // 默认允许所有工具调用
-        return true;
+    default void beforeToolCall(ToolCall toolCall, AgentContext context) throws MiddlewareException {
+        // 默认空实现，允许所有工具调用
     }
 
     /**
@@ -134,15 +140,14 @@ public interface Middleware {
      *   <li>状态审计</li>
      * </ul>
      *
-     * @param oldState 旧状态
-     * @param newState 新状态（候选）
+     * @param state    当前状态
      * @param context  执行上下文
-     * @return 最终的状态，如果返回 null 则使用 newState
+     * @return 最终的状态，如果返回 null 则使用原状态
      * @throws MiddlewareException 处理失败
      */
-    default AgentState onStateUpdate(AgentState oldState, AgentState newState, AgentContext context) throws MiddlewareException {
+    default AgentState onStateUpdate(AgentState state, AgentContext context) throws MiddlewareException {
         // 默认不修改状态
-        return newState;
+        return state;
     }
 
     /**
