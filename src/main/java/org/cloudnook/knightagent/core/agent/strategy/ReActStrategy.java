@@ -201,7 +201,7 @@ executionState.agentContext.setState(executionState.state);
 
         AgentContext agentContext = new AgentContext(request);
 
-        AgentState state = loadOrCreateState(request, checkpointer);
+        AgentState state = loadOrCreateState(config, checkpointer);
         if (request.getInput() != null && !request.getInput().isBlank()) {
             state = state.addMessage(HumanMessage.of(request.getInput(), request.getUserId()));
         }
@@ -229,7 +229,7 @@ executionState.agentContext.setState(executionState.state);
      */
     private AIMessage callLLM(ExecutionState state) throws ModelException {
         // 设置运行状态
-        state.agentContext.setStatus(AgentStatus.running(state.request.getThreadId()));
+        state.agentContext.setStatus(AgentStatus.running(state.config.getThreadId()));
 
         List<Message> messages = buildMessages(state);
         ChatOptions options = getChatOptions(state);
@@ -248,7 +248,7 @@ executionState.agentContext.setState(executionState.state);
      */
     private AIMessage callLLMStream(ExecutionState state) throws ModelException {
         // 设置运行状态
-        state.agentContext.setStatus(AgentStatus.running(state.request.getThreadId()));
+        state.agentContext.setStatus(AgentStatus.running(state.config.getThreadId()));
 
         List<Message> messages = buildMessages(state);
         ChatOptions options = getChatOptions(state);
@@ -307,7 +307,7 @@ executionState.agentContext.setState(executionState.state);
         for (ToolCall toolCall : toolCalls) {
             // 更新状态为等待工具执行
             state.agentContext.setStatus(AgentStatus.waitingForTool(
-                    state.request.getThreadId(),
+                    state.config.getThreadId(),
                     state.agentContext.getIteration()
             ));
 
@@ -316,7 +316,7 @@ executionState.agentContext.setState(executionState.state);
             } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
                 log.error("中间件 beforeToolCall 失败: {}", e.getMessage(), e);
                 // 恢复运行状态
-                state.agentContext.setStatus(AgentStatus.running(state.request.getThreadId()));
+                state.agentContext.setStatus(AgentStatus.running(state.config.getThreadId()));
                 continue;
             }
 
@@ -325,7 +325,7 @@ executionState.agentContext.setState(executionState.state);
                 state.agentContext.setStatus(AgentStatus.builder()
                         .statusType(AgentStatus.StatusType.WAITING_FOR_APPROVAL)
                         .description("等待工具审批: " + toolCall.getName())
-                        .currentThreadId(state.request.getThreadId())
+                        .currentThreadId(state.config.getThreadId())
                         .currentIteration(state.agentContext.getIteration())
                         .build());
                 return buildApprovalResponse(state, startTime, startInstant);
@@ -350,7 +350,7 @@ executionState.agentContext.setState(executionState.state);
             }
 
             // 恢复运行状态
-            state.agentContext.setStatus(AgentStatus.running(state.request.getThreadId()));
+            state.agentContext.setStatus(AgentStatus.running(state.config.getThreadId()));
         }
         return null; // 不需要审批
     }
@@ -385,8 +385,8 @@ executionState.agentContext.setState(executionState.state);
 
             // 保存检查点
             String checkpointId = null;
-            if (state.config.isCheckpointEnabled() && state.request.getThreadId() != null) {
-                checkpointId = state.checkpointer.save(state.request.getThreadId(), state.state);
+            if (state.config.isCheckpointEnabled() && state.config.getThreadId() != null) {
+                checkpointId = state.checkpointer.save(state.config.getThreadId(), state.state);
             }
 
             // 构建响应
@@ -395,7 +395,7 @@ executionState.agentContext.setState(executionState.state);
                     .messages(state.state.getMessages())
                     .toolCalls(finalMessage != null ? finalMessage.getToolCalls() : List.of())
                     .state(state.state)
-                    .threadId(state.request.getThreadId())
+                    .threadId(state.config.getThreadId())
                     .checkpointId(checkpointId)
                     .durationMs(System.currentTimeMillis() - startTime)
                     .startTime(startInstant)
@@ -417,7 +417,7 @@ executionState.agentContext.setState(executionState.state);
                     .messages(state.state.getMessages())
                     .toolCalls(finalMessage != null ? finalMessage.getToolCalls() : List.of())
                     .state(state.state)
-                    .threadId(state.request.getThreadId())
+                    .threadId(state.config.getThreadId())
                     .checkpointId(null)
                     .durationMs(System.currentTimeMillis() - startTime)
                     .startTime(startInstant)
@@ -440,7 +440,7 @@ executionState.agentContext.setState(executionState.state);
                 .messages(state.state.getMessages())
                 .toolCalls(List.of(approval.getToolCall()))
                 .state(state.state)
-                .threadId(state.request.getThreadId())
+                .threadId(state.config.getThreadId())
                 .checkpointId(null)
                 .approvalRequest(approval)
                 .durationMs(System.currentTimeMillis() - startTime)
@@ -460,12 +460,9 @@ executionState.agentContext.setState(executionState.state);
     /**
      * 加载或创建状态
      */
-    private AgentState loadOrCreateState(AgentRequest request, Checkpointer checkpointer) throws CheckpointException {
-        if (request.getState() != null) {
-            return request.getState();
-        }
-        if (request.getThreadId() != null && checkpointer != null) {
-            return checkpointer.loadLatest(request.getThreadId()).orElse(AgentState.initial());
+    private AgentState loadOrCreateState(AgentConfig config, Checkpointer checkpointer) throws CheckpointException {
+        if (config.getThreadId() != null && checkpointer != null) {
+            return checkpointer.loadLatest(config.getThreadId()).orElse(AgentState.initial());
         }
         return AgentState.initial();
     }

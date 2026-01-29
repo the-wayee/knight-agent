@@ -2,7 +2,6 @@ package org.cloudnook.knightagent.core.agent;
 
 import lombok.Builder;
 import lombok.Data;
-import org.cloudnook.knightagent.core.state.AgentState;
 
 import java.util.Map;
 import java.util.Optional;
@@ -25,22 +24,6 @@ public class AgentRequest {
      * 用户发送给 Agent 的文本消息。
      */
     private final String input;
-
-    /**
-     * 初始状态（用于恢复执行）
-     * <p>
-     * 如果提供此字段，Strategy 将使用此状态而不是从 checkpoint 加载。
-     * 主要用于审批恢复等场景。
-     */
-    private AgentState state;
-
-    /**
-     * Thread ID
-     * <p>
-     * 指定对话会话的 ID，用于加载历史状态。
-     * 如果为 null，则开始新的对话。
-     */
-    private String threadId;
 
     /**
      * 用户 ID
@@ -93,20 +76,6 @@ public class AgentRequest {
     public static AgentRequest of(String input) {
         return AgentRequest.builder()
                 .input(input)
-                .build();
-    }
-
-    /**
-     * 创建请求（输入 + Thread ID）
-     *
-     * @param input    用户输入
-     * @param threadId Thread ID
-     * @return Agent 请求
-     */
-    public static AgentRequest of(String input, String threadId) {
-        return AgentRequest.builder()
-                .input(input)
-                .threadId(threadId)
                 .build();
     }
 

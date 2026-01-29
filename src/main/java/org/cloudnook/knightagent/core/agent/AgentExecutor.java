@@ -175,7 +175,7 @@ public class AgentExecutor implements Agent {
             // 保存 checkpoint（如果策略没有保存）
             if (approval.getCheckpointId() == null && checkpointer != null) {
                 try {
-                    String checkpointId = checkpointer.save(request.getThreadId(), response.getState());
+                    String checkpointId = checkpointer.save(config.getThreadId(), response.getState());
                     approval.setCheckpointId(checkpointId);
                     response = response.toBuilder()
                             .checkpointId(checkpointId)
@@ -269,10 +269,8 @@ public class AgentExecutor implements Agent {
             // 2. 根据审批决策处理工具
             state = handleApprovalDecision(state, approval);
 
-            // 3. 构建继续执行的请求
+            // 3. 构建继续执行的请求（不需要传递 state 和 threadId，已在 config 中）
             AgentRequest continuationRequest = AgentRequest.builder()
-                    .threadId(approval.getThreadId())
-                    .state(state)
                     .build();
 
             // 4. 继续执行策略
@@ -326,7 +324,7 @@ public class AgentExecutor implements Agent {
                 try {
                     middlewareChain.afterToolCall(approval.getToolCall(), result,
                             new org.cloudnook.knightagent.core.middleware.AgentContext(
-                                    AgentRequest.builder().threadId(approval.getThreadId()).build()));
+                                    AgentRequest.builder().build()));
                 } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
                     log.warn("中间件 afterToolCall 处理失败: {}", e.getMessage());
                 }
@@ -347,7 +345,7 @@ public class AgentExecutor implements Agent {
                 try {
                     middlewareChain.afterToolCall(modifiedToolCall, result,
                             new org.cloudnook.knightagent.core.middleware.AgentContext(
-                                    AgentRequest.builder().threadId(approval.getThreadId()).build()));
+                                    AgentRequest.builder().build()));
                 } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
                     log.warn("中间件 afterToolCall 处理失败: {}", e.getMessage());
                 }

@@ -96,34 +96,24 @@ class ReActAgentIntegrationTest {
     void testMultiTurnConversation() throws AgentExecutionException {
         Checkpointer checkpointer = new InMemorySaver();
 
+        // 创建 Agent 时配置 threadId
         Agent agent = DefaultAgentFactory.agent()
                 .model(model)
                 .checkpointer(checkpointer)
                 .config(AgentConfig.builder()
+                        .threadId("test-conversation-001")
                         .systemPrompt("你是一个友好的AI助手，请记住用户的个人信息。")
                         .build())
                 .build();
 
-        String threadId = "test-conversation-001";
-
         // 第一轮：用户介绍自己
         System.out.println("=== 多轮对话测试 - 第一轮 ===");
-        AgentRequest request1 = AgentRequest.builder()
-                .input("我叫张三，今年25岁，是一名软件工程师。")
-                .threadId(threadId)
-                .build();
-
-        AgentResponse response1 = agent.invoke(request1);
+        AgentResponse response1 = agent.invoke(AgentRequest.of("我叫张三，今年25岁，是一名软件工程师。"));
         System.out.println("AI: " + response1.getOutput());
 
         // 第二轮：询问用户信息
         System.out.println("\n=== 多轮对话测试 - 第二轮 ===");
-        AgentRequest request2 = AgentRequest.builder()
-                .input("你还记得我的名字和职业吗？")
-                .threadId(threadId)
-                .build();
-
-        AgentResponse response2 = agent.invoke(request2);
+        AgentResponse response2 = agent.invoke(AgentRequest.of("你还记得我的名字和职业吗？"));
         System.out.println("AI: " + response2.getOutput());
 
         // 验证 AI 记住了用户信息

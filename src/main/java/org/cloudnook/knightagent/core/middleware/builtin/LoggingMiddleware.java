@@ -62,7 +62,9 @@ public class LoggingMiddleware implements Middleware {
     public void beforeInvoke(AgentRequest request, AgentContext context) {
         if (logRequests) {
             log.info("===== Agent 请求开始 =====");
-            log.info("Thread ID: {}", request.getThreadId());
+            if (context.getStatus() != null && context.getStatus().getCurrentThreadId() != null) {
+                log.info("Thread ID: {}", context.getStatus().getCurrentThreadId());
+            }
             log.info("User ID: {}", request.getUserId());
             log.info("输入: {}", request.getInput());
             log.info("最大迭代次数: {}", request.getMaxIterations());

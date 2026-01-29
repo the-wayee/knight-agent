@@ -111,7 +111,7 @@ public class HumanInTheLoopMiddleware implements Middleware {
         // 创建审批请求
         ApprovalRequest approval = ApprovalRequest.fromToolCall(
                 toolCall,
-                context.getRequest().getThreadId(),
+                context.getStatus() != null ? context.getStatus().getCurrentThreadId() : null,
                 null // checkpointId 会在后续处理时设置
         );
 

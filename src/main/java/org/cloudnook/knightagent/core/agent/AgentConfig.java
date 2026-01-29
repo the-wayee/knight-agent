@@ -90,6 +90,14 @@ public class AgentConfig {
     private org.cloudnook.knightagent.core.state.StateReducer stateReducer;
 
     /**
+     * Thread ID
+     * <p>
+     * 指定对话会话的 ID，用于加载历史状态。
+     * 如果为 null，则每次都是新对话。
+     */
+    private String threadId;
+
+    /**
      * 附加配置
      * <p>
      * 其他自定义配置参数。
@@ -177,6 +185,7 @@ public class AgentConfig {
         copy.streamEnabled = this.streamEnabled;
         copy.checkpointEnabled = this.checkpointEnabled;
         copy.timeoutSeconds = this.timeoutSeconds;
+        copy.threadId = this.threadId;
         copy.chatOptions = this.chatOptions;
         copy.middlewares = this.middlewares != null ? new ArrayList<>(this.middlewares) : null;
         copy.stateReducer = this.stateReducer;
@@ -257,6 +266,11 @@ public class AgentConfig {
 
         public Builder stateReducer(org.cloudnook.knightagent.core.state.StateReducer stateReducer) {
             config.stateReducer = stateReducer;
+            return this;
+        }
+
+        public Builder threadId(String threadId) {
+            config.threadId = threadId;
             return this;
         }
 
