@@ -200,11 +200,6 @@ executionState.agentContext.setState(executionState.state);
         MiddlewareChain middlewareChain = context.getMiddlewareChain();
 
         AgentContext agentContext = new AgentContext(request);
-        try {
-            middlewareChain.beforeInvoke(request, agentContext);
-        } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
-            throw new AgentExecutionException("中间件处理失败: " + e.getMessage(), e, "MIDDLEWARE_ERROR");
-        }
 
         AgentState state = loadOrCreateState(request, checkpointer);
         if (request.getInput() != null && !request.getInput().isBlank()) {
@@ -214,8 +209,14 @@ executionState.agentContext.setState(executionState.state);
         // 同步到 agentContext，供中间件访问
         agentContext.setState(state);
 
-        // 设置初始运行状态
-        agentContext.setStatus(AgentStatus.running(request.getThreadId()));
+        // 设置初始状态为 READY
+        agentContext.setStatus(AgentStatus.ready());
+
+        try {
+            middlewareChain.beforeInvoke(request, agentContext);
+        } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
+            throw new AgentExecutionException("中间件处理失败: " + e.getMessage(), e, "MIDDLEWARE_ERROR");
+        }
 
         int maxIterations = getMaxIterations(request, config);
 
@@ -227,6 +228,9 @@ executionState.agentContext.setState(executionState.state);
      * 调用 LLM（同步）
      */
     private AIMessage callLLM(ExecutionState state) throws ModelException {
+        // 设置运行状态
+        state.agentContext.setStatus(AgentStatus.running(state.request.getThreadId()));
+
         List<Message> messages = buildMessages(state);
         ChatOptions options = getChatOptions(state);
 
@@ -243,6 +247,9 @@ executionState.agentContext.setState(executionState.state);
      * 调用 LLM（流式）
      */
     private AIMessage callLLMStream(ExecutionState state) throws ModelException {
+        // 设置运行状态
+        state.agentContext.setStatus(AgentStatus.running(state.request.getThreadId()));
+
         List<Message> messages = buildMessages(state);
         ChatOptions options = getChatOptions(state);
 
@@ -395,11 +402,11 @@ executionState.agentContext.setState(executionState.state);
                     .endTime(Instant.now())
                     .build();
 
-            // 通过中间件处理响应
-            state.middlewareChain.afterInvoke(response, state.agentContext);
-
             // 设置完成状态
             state.agentContext.setStatus(AgentStatus.idle());
+
+            // 通过中间件处理响应
+            state.middlewareChain.afterInvoke(response, state.agentContext);
 
             return response;
         } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {

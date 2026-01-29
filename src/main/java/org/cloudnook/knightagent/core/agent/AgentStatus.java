@@ -45,11 +45,15 @@ public class AgentStatus {
      */
     public enum StatusType {
         /**
+         * 准备就绪，等待执行
+         */
+        READY,
+        /**
          * 空闲
          */
         IDLE,
         /**
-         * 执行中
+         * 执行中（LLM 调用中）
          */
         RUNNING,
         /**
@@ -72,6 +76,16 @@ public class AgentStatus {
          * 已停止
          */
         STOPPED
+    }
+
+    /**
+     * 创建准备就绪状态
+     */
+    public static AgentStatus ready() {
+        return AgentStatus.builder()
+                .statusType(StatusType.READY)
+                .description("Agent 准备就绪")
+                .build();
     }
 
     /**
