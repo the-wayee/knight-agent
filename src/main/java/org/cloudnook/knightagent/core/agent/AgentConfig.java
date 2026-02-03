@@ -83,13 +83,6 @@ public class AgentConfig {
     private List<org.cloudnook.knightagent.core.middleware.Middleware> middlewares;
 
     /**
-     * 状态归约器
-     * <p>
-     * 用于控制状态更新的规则。
-     */
-    private org.cloudnook.knightagent.core.state.StateReducer stateReducer;
-
-    /**
      * Thread ID
      * <p>
      * 指定对话会话的 ID，用于加载历史状态。
@@ -188,7 +181,6 @@ public class AgentConfig {
         copy.threadId = this.threadId;
         copy.chatOptions = this.chatOptions;
         copy.middlewares = this.middlewares != null ? new ArrayList<>(this.middlewares) : null;
-        copy.stateReducer = this.stateReducer;
         copy.additionalConfig = this.additionalConfig != null ? new HashMap<>(this.additionalConfig) : null;
         return copy;
     }
@@ -261,11 +253,6 @@ public class AgentConfig {
 
         public Builder middlewares(List<org.cloudnook.knightagent.core.middleware.Middleware> middlewares) {
             config.middlewares = middlewares;
-            return this;
-        }
-
-        public Builder stateReducer(org.cloudnook.knightagent.core.state.StateReducer stateReducer) {
-            config.stateReducer = stateReducer;
             return this;
         }
 

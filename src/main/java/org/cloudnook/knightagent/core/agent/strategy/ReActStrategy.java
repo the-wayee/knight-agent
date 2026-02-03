@@ -1,13 +1,8 @@
 package org.cloudnook.knightagent.core.agent.strategy;
 
-import org.cloudnook.knightagent.core.agent.AgentConfig;
-import org.cloudnook.knightagent.core.agent.AgentExecutionException;
-import org.cloudnook.knightagent.core.agent.AgentRequest;
-import org.cloudnook.knightagent.core.agent.AgentResponse;
-import org.cloudnook.knightagent.core.agent.AgentStatus;
-import org.cloudnook.knightagent.core.agent.ApprovalRequest;
-import org.cloudnook.knightagent.core.checkpoint.Checkpointer;
+import org.cloudnook.knightagent.core.agent.*;
 import org.cloudnook.knightagent.core.checkpoint.CheckpointException;
+import org.cloudnook.knightagent.core.checkpoint.Checkpointer;
 import org.cloudnook.knightagent.core.message.*;
 import org.cloudnook.knightagent.core.middleware.AgentContext;
 import org.cloudnook.knightagent.core.middleware.MiddlewareChain;
@@ -95,9 +90,9 @@ executionState.agentContext.setState(executionState.state);
                 }
 
                 // 执行工具调用
-                AgentResponse approvalResponse = executeToolCalls(aiMessage.getToolCalls(), executionState, startTime, startInstant);
-                if (approvalResponse != null) {
-                    return approvalResponse; // 需要审批
+                AgentResponse interruptResponse = executeToolCalls(aiMessage.getToolCalls(), executionState);
+                if (interruptResponse != null) {
+                    return interruptResponse; // 被中断
                 }
             }
 
@@ -157,9 +152,9 @@ executionState.agentContext.setState(executionState.state);
                 }
 
                 // 执行工具调用
-                AgentResponse approvalResponse = executeToolCalls(aiMessage.getToolCalls(), executionState, startTime, startInstant);
-                if (approvalResponse != null) {
-                    return approvalResponse; // 需要审批
+                AgentResponse interruptResponse = executeToolCalls(aiMessage.getToolCalls(), executionState);
+                if (interruptResponse != null) {
+                    return interruptResponse; // 被中断
                 }
             }
 
@@ -300,10 +295,12 @@ executionState.agentContext.setState(executionState.state);
 
     /**
      * 执行工具调用
-     * @return 如果需要审批返回审批响应，否则返回 null
+     * <p>
+     * 使用 ToolCallExecutor 执行工具调用，自动处理中间件拦截和中断。
+     *
+     * @return 如果被中断返回中断响应，否则返回 null
      */
-    private AgentResponse executeToolCalls(List<ToolCall> toolCalls, ExecutionState state,
-                                         long startTime, Instant startInstant) {
+    private AgentResponse executeToolCalls(List<ToolCall> toolCalls, ExecutionState state) throws AgentExecutionException {
         for (ToolCall toolCall : toolCalls) {
             // 更新状态为等待工具执行
             state.agentContext.setStatus(AgentStatus.waitingForTool(
@@ -311,48 +308,26 @@ executionState.agentContext.setState(executionState.state);
                     state.agentContext.getIteration()
             ));
 
-            try {
-                state.middlewareChain.beforeToolCall(toolCall, state.agentContext);
-            } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
-                log.error("中间件 beforeToolCall 失败: {}", e.getMessage(), e);
-                // 恢复运行状态
-                state.agentContext.setStatus(AgentStatus.running(state.config.getThreadId()));
-                continue;
+            // 创建临时的 ExecutionContext
+            ExecutionContext execContext = ExecutionContext.builder()
+                    .model(state.model)
+                    .toolInvoker(state.toolInvoker)
+                    .checkpointer(state.checkpointer)
+                    .config(state.config)
+                    .middlewareChain(state.middlewareChain)
+                    .toolCallExecutor(state.toolCallExecutor)
+                    .build();
+            execContext.setAgentContext(state.agentContext);
+
+            // 执行工具调用
+            AgentResponse interruptResponse = state.toolCallExecutor.execute(toolCall, execContext);
+            if (interruptResponse != null) {
+                return interruptResponse; // 被中断
             }
 
-            if (state.agentContext.hasPendingApproval()) {
-                // 设置等待审批状态
-                state.agentContext.setStatus(AgentStatus.builder()
-                        .statusType(AgentStatus.StatusType.WAITING_FOR_APPROVAL)
-                        .description("等待工具审批: " + toolCall.getName())
-                        .currentThreadId(state.config.getThreadId())
-                        .currentIteration(state.agentContext.getIteration())
-                        .build());
-                return buildApprovalResponse(state, startTime, startInstant);
-            }
-
-            if (state.agentContext.isStopped()) {
-                continue;
-            }
-
-            try {
-                ToolResult toolResult = state.toolInvoker.invoke(toolCall);
-                state.middlewareChain.afterToolCall(toolCall, toolResult, state.agentContext);
-                state.state = state.state.addMessage(toolResult.toMessage());
-                state.agentContext.setState(state.state);
-            } catch (ToolExecutionException e) {
-                log.error("工具执行失败: {}", e.getMessage(), e);
-                // 继续执行，让 LLM 知道错误
-                state.state = state.state.addMessage(resultToMessage(toolCall, e));
-                state.agentContext.setState(state.state);
-            } catch (org.cloudnook.knightagent.core.middleware.MiddlewareException e) {
-                log.error("中间件 afterToolCall 失败: {}", e.getMessage(), e);
-            }
-
-            // 恢复运行状态
             state.agentContext.setStatus(AgentStatus.running(state.config.getThreadId()));
         }
-        return null; // 不需要审批
+        return null;
     }
 
     /**
@@ -373,12 +348,6 @@ executionState.agentContext.setState(executionState.state);
     private AgentResponse finalizeResponse(AIMessage finalMessage, ExecutionState state,
                                           long startTime, Instant startInstant) {
         try {
-            // 应用状态归约器
-            if (state.config.getStateReducer() != null) {
-                state.state = state.config.getStateReducer().reduce(state.state, state.state);
-                state.agentContext.setState(state.state);
-            }
-
             // 通过中间件处理状态更新
             state.state = state.middlewareChain.onStateUpdate(state.state, state.agentContext);
             state.agentContext.setState(state.state);
@@ -427,34 +396,6 @@ executionState.agentContext.setState(executionState.state);
             // 包装为运行时异常，由上层处理
             throw new RuntimeException("检查点操作失败", e);
         }
-    }
-
-    /**
-     * 构建等待审批的响应
-     */
-    private AgentResponse buildApprovalResponse(ExecutionState state, long startTime, Instant startInstant) {
-        ApprovalRequest approval = state.agentContext.getPendingApproval();
-
-        AgentResponse response = AgentResponse.builder()
-                .output("等待人工审批: " + approval.getToolName())
-                .messages(state.state.getMessages())
-                .toolCalls(List.of(approval.getToolCall()))
-                .state(state.state)
-                .threadId(state.config.getThreadId())
-                .checkpointId(null)
-                .approvalRequest(approval)
-                .durationMs(System.currentTimeMillis() - startTime)
-                .startTime(startInstant)
-                .endTime(Instant.now())
-                .build();
-
-        try {
-            state.middlewareChain.afterInvoke(response, state.agentContext);
-        } catch (Exception e) {
-            log.warn("中间件 afterInvoke 处理失败: {}", e.getMessage());
-        }
-
-        return response;
     }
 
     /**
@@ -515,6 +456,7 @@ executionState.agentContext.setState(executionState.state);
         final Checkpointer checkpointer;
         final AgentConfig config;
         final MiddlewareChain middlewareChain;
+        final ToolCallExecutor toolCallExecutor;
         final AgentContext agentContext;
         AgentState state;
         final int maxIterations;
@@ -531,6 +473,15 @@ executionState.agentContext.setState(executionState.state);
             this.checkpointer = checkpointer;
             this.config = config;
             this.middlewareChain = middlewareChain;
+            // 创建工具调用执行器
+            this.toolCallExecutor = new ToolCallExecutor() {
+                @Override
+                public AgentResponse execute(ToolCall toolCall, ExecutionContext context) throws AgentExecutionException {
+                    // 这里我们已经有 ExecutionState，需要适配
+                    return new DefaultToolCallExecutor(middlewareChain, toolInvoker, checkpointer)
+                        .execute(toolCall, context);
+                }
+            };
             this.agentContext = agentContext;
             this.state = state;
             this.maxIterations = maxIterations;

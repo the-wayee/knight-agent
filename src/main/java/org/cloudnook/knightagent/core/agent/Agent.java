@@ -1,7 +1,6 @@
 package org.cloudnook.knightagent.core.agent;
 
-import org.cloudnook.knightagent.core.message.AIMessage;
-import org.cloudnook.knightagent.core.message.Message;
+import org.cloudnook.knightagent.core.interception.InterruptCommand;
 import org.cloudnook.knightagent.core.streaming.StreamCallback;
 
 import java.util.List;
@@ -145,8 +144,42 @@ public interface Agent {
      * @return Agent 响应
      * @throws AgentExecutionException 执行失败
      * @throws UnsupportedOperationException 如果 Agent 不支持恢复执行
+     * @deprecated 使用 {@link #resume(InterruptCommand)} 代替
      */
+    @Deprecated
     default AgentResponse resume(String checkpointId, ApprovalRequest approval) throws AgentExecutionException {
         throw new UnsupportedOperationException("该 Agent 不支持从审批恢复执行");
+    }
+
+    /**
+     * 从中断恢复执行
+     * <p>
+     * 当 Agent 执行被中断（等待审批、限流等）后，
+     * 使用此方法从 checkpoint 恢复执行。
+     * <p>
+     * 使用示例：
+     * <pre>{@code
+     * // 1. 执行 Agent
+     * AgentResponse response = agent.invoke(request);
+     *
+     * // 2. 检查是否被中断
+     * if (response.isInterrupted()) {
+     *     Interrupt interrupt = response.getInterrupt();
+     *
+     *     // 3. 处理中断（例如：用户做出决策）
+     *     InterruptCommand command = interrupt.toCommand(resumeValue);
+     *
+     *     // 4. 恢复执行
+     *     response = agent.resume(command);
+     * }
+     * }</pre>
+     *
+     * @param command 中断恢复命令
+     * @return Agent 响应
+     * @throws AgentExecutionException 执行失败
+     * @throws UnsupportedOperationException 如果 Agent 不支持恢复执行
+     */
+    default AgentResponse resume(InterruptCommand command) throws AgentExecutionException {
+        throw new UnsupportedOperationException("该 Agent 不支持从中断恢复执行");
     }
 }

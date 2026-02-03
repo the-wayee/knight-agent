@@ -4,10 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.cloudnook.knightagent.core.agent.AgentRequest;
 import org.cloudnook.knightagent.core.agent.AgentResponse;
 import org.cloudnook.knightagent.core.agent.AgentStatus;
+import org.cloudnook.knightagent.core.interception.InterceptionResult;
 import org.cloudnook.knightagent.core.message.ToolCall;
 import org.cloudnook.knightagent.core.message.ToolResult;
 import org.cloudnook.knightagent.core.middleware.AgentContext;
 import org.cloudnook.knightagent.core.middleware.Middleware;
+import org.cloudnook.knightagent.core.middleware.MiddlewareException;
 import org.cloudnook.knightagent.core.state.AgentState;
 
 import java.time.Duration;
@@ -86,12 +88,12 @@ public class LoggingMiddleware implements Middleware {
     }
 
     @Override
-    public void beforeToolCall(ToolCall toolCall, AgentContext context) {
+    public InterceptionResult beforeToolCall(ToolCall toolCall, AgentContext context) throws MiddlewareException {
         if (logToolCalls) {
             log.info("→ 工具调用: {} [{}]", toolCall.getName(), toolCall.getId());
             log.debug("   参数: {}", toolCall.getArguments());
         }
-        // 不修改 context，允许工具正常执行
+        return InterceptionResult.continueExec();
     }
 
     @Override

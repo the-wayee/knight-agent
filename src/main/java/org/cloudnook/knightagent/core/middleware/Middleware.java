@@ -2,7 +2,7 @@ package org.cloudnook.knightagent.core.middleware;
 
 import org.cloudnook.knightagent.core.agent.AgentRequest;
 import org.cloudnook.knightagent.core.agent.AgentResponse;
-import org.cloudnook.knightagent.core.message.Message;
+import org.cloudnook.knightagent.core.interception.InterceptionResult;
 import org.cloudnook.knightagent.core.message.ToolCall;
 import org.cloudnook.knightagent.core.state.AgentState;
 
@@ -90,23 +90,25 @@ public interface Middleware {
      *   <li>权限检查</li>
      *   <li>参数验证</li>
      *   <li>调用日志</li>
-     *   <li>触发审批 - 通过 {@link AgentContext#setPendingApproval(ApprovalRequest)}</li>
-     *   <li>阻止调用 - 通过 {@link AgentContext#stop()}</li>
+     *   <li>触发审批 - 返回 {@link InterceptionResult#interrupt(Interrupt)}</li>
+     *   <li>阻止调用 - 返回 {@link InterceptionResult#stop(String)}</li>
      * </ul>
      * <p>
-     * 中间件通过修改 {@link AgentContext} 来控制工具调用的行为：
+     * 中间件通过返回 {@link InterceptionResult} 显式声明对执行流程的控制意图：
      * <ul>
-     *   <li>默认行为 - 不做任何操作，工具正常执行</li>
-     *   <li>阻止执行 - 调用 {@code context.stop()}</li>
-     *   <li>触发审批 - 调用 {@code context.setPendingApproval(...)}</li>
+     *   <li>继续执行 - 返回 {@link InterceptionResult#continueExec()}</li>
+     *   <li>中断执行 - 返回 {@link InterceptionResult#interrupt(Interrupt)}</li>
+     *   <li>停止执行 - 返回 {@link InterceptionResult#stop(String)}</li>
      * </ul>
      *
      * @param toolCall 工具调用信息
      * @param context  执行上下文
+     * @return 拦截结果
      * @throws MiddlewareException 处理失败
      */
-    default void beforeToolCall(ToolCall toolCall, AgentContext context) throws MiddlewareException {
-        // 默认空实现，允许所有工具调用
+    default InterceptionResult beforeToolCall(ToolCall toolCall, AgentContext context) throws MiddlewareException {
+        // 默认实现：继续执行
+        return InterceptionResult.continueExec();
     }
 
     /**

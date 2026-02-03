@@ -87,8 +87,20 @@ public class AgentResponse {
     private final String error;
 
     /**
-     * 等待审批的请求（如果需要人工介入）
+     * 拦截结果（Strategy 返回给 AgentExecutor）
      */
+    private final org.cloudnook.knightagent.core.interception.InterceptionResult interceptionResult;
+
+    /**
+     * 最终的中断（AgentExecutor 处理后设置）
+     */
+    private final org.cloudnook.knightagent.core.interception.Interrupt interrupt;
+
+    /**
+     * 等待审批的请求（如果需要人工介入）
+     * @deprecated 使用 interrupt 代替
+     */
+    @Deprecated
     private final ApprovalRequest approvalRequest;
 
     /**
@@ -99,10 +111,26 @@ public class AgentResponse {
     }
 
     /**
-     * 是否需要审批
+     * 是否有拦截结果需要处理
      */
+    public boolean hasInterceptionResult() {
+        return interceptionResult != null;
+    }
+
+    /**
+     * 是否被中断
+     */
+    public boolean isInterrupted() {
+        return interrupt != null;
+    }
+
+    /**
+     * 是否需要审批（兼容方法）
+     * @deprecated 使用 isInterrupted() 代替
+     */
+    @Deprecated
     public boolean requiresApproval() {
-        return approvalRequest != null;
+        return interrupt != null || approvalRequest != null;
     }
 
     /**

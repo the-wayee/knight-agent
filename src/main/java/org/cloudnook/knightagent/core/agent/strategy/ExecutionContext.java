@@ -51,6 +51,33 @@ public class ExecutionContext {
     private final MiddlewareChain middlewareChain;
 
     /**
+     * 工具调用执行器
+     * <p>
+     * 封装工具调用的完整执行流程，包括中间件拦截、中断处理等。
+     * 如果未设置，将自动创建默认执行器。
+     */
+    private final ToolCallExecutor toolCallExecutor;
+
+    /**
+     * 获取工具调用执行器
+     * <p>
+     * 如果未设置，返回默认执行器。
+     *
+     * @return 工具调用执行器
+     */
+    public ToolCallExecutor getToolCallExecutor() {
+        if (toolCallExecutor != null) {
+            return toolCallExecutor;
+        }
+        // 创建默认执行器
+        return new DefaultToolCallExecutor(
+            middlewareChain,
+            toolInvoker,
+            checkpointer
+        );
+    }
+
+    /**
      * 附加属性
      * <p>
      * 用于存储执行过程中的动态数据。
@@ -71,6 +98,26 @@ public class ExecutionContext {
         }
         Object value = attributes.get(key);
         return Optional.ofNullable((T) value);
+    }
+
+    /**
+     * 获取 AgentContext（便捷方法）
+     * <p>
+     * 从属性中获取当前 AgentContext。
+     *
+     * @return AgentContext 的 Optional 包装
+     */
+    public Optional<org.cloudnook.knightagent.core.middleware.AgentContext> getAgentContext() {
+        return getAttribute("agentContext");
+    }
+
+    /**
+     * 设置 AgentContext（便捷方法）
+     *
+     * @param agentContext AgentContext
+     */
+    public void setAgentContext(org.cloudnook.knightagent.core.middleware.AgentContext agentContext) {
+        attributes.put("agentContext", agentContext);
     }
 
     /**

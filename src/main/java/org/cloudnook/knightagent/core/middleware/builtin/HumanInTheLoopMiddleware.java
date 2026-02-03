@@ -1,14 +1,12 @@
 package org.cloudnook.knightagent.core.middleware.builtin;
 
 import lombok.extern.slf4j.Slf4j;
-import org.cloudnook.knightagent.core.agent.AgentRequest;
-import org.cloudnook.knightagent.core.agent.AgentResponse;
-import org.cloudnook.knightagent.core.agent.ApprovalRequest;
+import org.cloudnook.knightagent.core.interception.InterceptionResult;
+import org.cloudnook.knightagent.core.interception.ToolApprovalInterrupt;
 import org.cloudnook.knightagent.core.message.ToolCall;
-import org.cloudnook.knightagent.core.message.ToolResult;
 import org.cloudnook.knightagent.core.middleware.AgentContext;
 import org.cloudnook.knightagent.core.middleware.Middleware;
-import org.cloudnook.knightagent.core.state.AgentState;
+import org.cloudnook.knightagent.core.middleware.MiddlewareException;
 
 import java.util.List;
 
@@ -100,25 +98,22 @@ public class HumanInTheLoopMiddleware implements Middleware {
     }
 
     @Override
-    public void beforeToolCall(ToolCall toolCall, AgentContext context) {
+    public InterceptionResult beforeToolCall(ToolCall toolCall, AgentContext context) throws MiddlewareException {
         // 检查是否需要审批
         if (!needsReview(toolCall)) {
-            return;
+            return InterceptionResult.continueExec();
         }
 
         log.info("工具需要人工审批: 工具={}, 调用={}", toolCall.getName(), toolCall.getId());
 
-        // 创建审批请求
-        ApprovalRequest approval = ApprovalRequest.fromToolCall(
-                toolCall,
-                context.getStatus() != null ? context.getStatus().getCurrentThreadId() : null,
-                null // checkpointId 会在后续处理时设置
-        );
+        String threadId = context.getStatus() != null
+            ? context.getStatus().getCurrentThreadId()
+            : null;
 
-        // 设置到 context，Strategy 会处理
-        context.setPendingApproval(approval);
+        // 创建工具审批中断
+        ToolApprovalInterrupt interrupt = ToolApprovalInterrupt.fromToolCall(toolCall, threadId);
 
-        // 不需要调用 context.stop()，pendingApproval 会阻止工具执行
+        return InterceptionResult.interrupt(interrupt);
     }
 
     /**
